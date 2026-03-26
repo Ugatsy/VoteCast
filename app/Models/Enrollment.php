@@ -37,11 +37,39 @@ class Enrollment extends Model
                      ->where('is_active', true);
     }
 
+    public function scopeByCourse($query, $course)
+    {
+        return $query->where('course', $course);
+    }
+
+    public function scopeByYearLevel($query, $yearLevel)
+    {
+        return $query->where('year_level', $yearLevel);
+    }
+
+    public function scopeBySection($query, $section)
+    {
+        return $query->where('section', $section);
+    }
+
     // ── Computed attributes ───────────────────────────────────────────────────
 
     public function getFullNameAttribute(): string
     {
         $middle = $this->middle_name ? ' ' . $this->middle_name : '';
         return "{$this->first_name}{$middle} {$this->last_name}";
+    }
+
+    public function getFullNameReverseAttribute(): string
+    {
+        return "{$this->last_name}, {$this->first_name}" . ($this->middle_name ? " {$this->middle_name}" : '');
+    }
+
+    /**
+     * Get formatted student code with course
+     */
+    public function getStudentIdentifierAttribute(): string
+    {
+        return "{$this->student_code} - {$this->course}";
     }
 }

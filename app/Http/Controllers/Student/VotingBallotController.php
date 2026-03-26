@@ -6,6 +6,7 @@ use App\Models\Vote;
 use App\Models\VotingSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class VotingBallotController extends Controller
 {
@@ -13,18 +14,59 @@ class VotingBallotController extends Controller
     {
         $user = auth()->user();
 
-        // Eligibility check
-        if (!$votingSession->isEligible($user)) {
-            abort(403, 'You are not eligible to vote in this election.');
-        }
+        // Debug logging
+        Log::info('Ballot access attempt', [
+            'session_id' => $votingSession->id,
+            'session_title' => $votingSession->title,
+            'session_status' => $votingSession->status,
+            'session_start_date' => $votingSession->start_date,
+            'session_end_date' => $votingSession->end_date,
+            'session_category' => $votingSession->category,
+            'session_target_course' => $votingSession->target_course,
+            'session_target_department' => $votingSession->target_department,
+            'user_id' => $user->id,
+            'user_department' => $user->department,
+            'user_student_id' => $user->student_id,
+            'current_time' => now()
+        ]);
 
-        // Active check
+        // Check if session is active
         if (!$votingSession->isActive()) {
+            Log::warning('Session not active', [
+                'session_id' => $votingSession->id,
+                'status' => $votingSession->status,
+                'start_date' => $votingSession->start_date,
+                'end_date' => $votingSession->end_date,
+                'current_time' => now()
+            ]);
+
             return redirect()->route('student.dashboard')
                 ->with('error', 'This election is not currently active.');
         }
 
-        // Already voted check
+        // Check eligibility
+        $isEligible = $this->checkEligibility($votingSession, $user);
+
+        Log::info('Eligibility check result', [
+            'is_eligible' => $isEligible,
+            'session_id' => $votingSession->id,
+            'user_id' => $user->id
+        ]);
+
+        if (!$isEligible) {
+            Log::warning('User not eligible', [
+                'session_id' => $votingSession->id,
+                'user_id' => $user->id,
+                'user_department' => $user->department,
+                'session_category' => $votingSession->category,
+                'session_target_course' => $votingSession->target_course,
+                'session_target_department' => $votingSession->target_department
+            ]);
+
+            abort(403, 'You are not eligible to vote in this election.');
+        }
+
+        // Check if already voted
         $alreadyVoted = Vote::where('voter_id', $user->id)
             ->where('voting_session_id', $votingSession->id)
             ->exists();
@@ -39,12 +81,47 @@ class VotingBallotController extends Controller
         return view('student.ballot', compact('votingSession', 'alreadyVoted'));
     }
 
+    private function checkEligibility($session, $user)
+    {
+        // Check if session is active
+        if (!$session->isActive()) {
+            return false;
+        }
+
+        // Check based on category
+        switch ($session->category) {
+            case 'department':
+                // For department-wide elections, check if target_department matches or is null
+                if (empty($session->target_department)) {
+                    return true; // All departments
+                }
+                return $session->target_department === $user->department;
+
+            case 'course':
+                // For course-specific elections
+                return $session->target_course === $user->department;
+
+            case 'manual':
+                // For manual voter lists
+                return $session->manualVoters()
+                    ->where('user_id', $user->id)
+                    ->exists();
+
+            default:
+                return false;
+        }
+    }
+
     public function submit(Request $request, VotingSession $votingSession)
     {
         $user = auth()->user();
 
         // Re-validate everything server-side
-        if (!$votingSession->isEligible($user) || !$votingSession->isActive()) {
+        if (!$this->checkEligibility($votingSession, $user) || !$votingSession->isActive()) {
+            Log::warning('Vote submission blocked - eligibility failed', [
+                'session_id' => $votingSession->id,
+                'user_id' => $user->id
+            ]);
             abort(403, 'Voting not permitted.');
         }
 
@@ -60,7 +137,7 @@ class VotingBallotController extends Controller
         }
 
         // Build validation rules — every position must be answered
-        $positions       = $votingSession->positions;
+        $positions = $votingSession->positions;
         $validationRules = $positions->mapWithKeys(fn($p) => [
             "votes.{$p->id}" => 'required|exists:candidates,id',
         ])->toArray();
@@ -83,14 +160,21 @@ class VotingBallotController extends Controller
         foreach ($positions as $position) {
             Vote::create([
                 'voting_session_id' => $votingSession->id,
-                'position_id'       => $position->id,
-                'candidate_id'      => $votes[$position->id],
-                'voter_id'          => $user->id,
-                'receipt_id'        => $receiptId . '-P' . $position->id,
-                'ip_address'        => $request->ip(),
-                'user_agent'        => $request->userAgent(),
+                'position_id' => $position->id,
+                'candidate_id' => $votes[$position->id],
+                'voter_id' => $user->id,
+                'receipt_id' => $receiptId . '-P' . $position->id,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
             ]);
         }
+
+        Log::info('Votes submitted successfully', [
+            'session_id' => $votingSession->id,
+            'user_id' => $user->id,
+            'receipt_id' => $receiptId,
+            'votes_count' => count($votes)
+        ]);
 
         return redirect()->route('student.confirmation', [
             'session' => $votingSession->id,

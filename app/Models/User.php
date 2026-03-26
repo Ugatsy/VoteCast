@@ -71,4 +71,49 @@ class User extends Authenticatable
     {
         return $value ?? '';
     }
+
+    /**
+     * Check if user has voted in a specific session
+     */
+    public function hasVotedInSession($sessionId): bool
+    {
+        return $this->votes()->where('voting_session_id', $sessionId)->exists();
+    }
+
+    /**
+     * Get user's votes for a specific session
+     */
+    public function getVotesForSession($sessionId)
+    {
+        return $this->votes()
+            ->where('voting_session_id', $sessionId)
+            ->with(['candidate', 'position'])
+            ->get();
+    }
+
+    /**
+     * Get user's initials from full name
+     */
+    public function getInitialsAttribute(): string
+    {
+        $words = explode(' ', $this->full_name);
+        $initials = '';
+        foreach (array_slice($words, 0, 2) as $word) {
+            if (!empty($word)) {
+                $initials .= strtoupper(substr($word, 0, 1));
+            }
+        }
+        return $initials ?: '?';
+    }
+
+    /**
+     * Get user's profile photo URL
+     */
+    public function getProfilePhotoUrlAttribute(): string
+    {
+        if ($this->photo) {
+            return asset('storage/' . $this->photo);
+        }
+        return "https://ui-avatars.com/api/?name=" . urlencode($this->initials) . "&background=1a56db&color=fff&size=40";
+    }
 }

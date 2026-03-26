@@ -59,7 +59,14 @@ class VotingSessionController extends Controller
 
     public function show(VotingSession $votingSession)
     {
-        $votingSession->load('positions.candidates.student', 'creator');
+        // Load positions and candidates with vote counts
+        $votingSession->load([
+            'positions.candidates' => function($query) {
+                $query->withCount('votes')->orderBy('votes_count', 'desc');
+            },
+            'positions.candidates.student',
+            'creator'
+        ]);
 
         $totalVoters = 0;
         if ($votingSession->category === 'course') {
@@ -157,13 +164,15 @@ class VotingSessionController extends Controller
 
     public function results(VotingSession $votingSession)
     {
-        $votingSession->load('positions.candidates.student');
+        $votingSession->load(['positions.candidates' => function($query) {
+            $query->withCount('votes')->orderBy('votes_count', 'desc');
+        }, 'positions.candidates.student']);
 
         $results = $votingSession->positions->map(function ($position) {
-            $totalVotes = $position->votes()->count();
+            $totalVotes = $position->candidates->sum('votes_count');
 
             $candidates = $position->candidates->map(function ($candidate) use ($totalVotes) {
-                $voteCount  = $candidate->votes()->count();
+                $voteCount  = $candidate->votes_count;
                 $percentage = $totalVotes > 0 ? round(($voteCount / $totalVotes) * 100, 2) : 0;
 
                 return [
@@ -187,5 +196,67 @@ class VotingSessionController extends Controller
         return view('admin.sessions.results', compact(
             'votingSession', 'results', 'totalVoters', 'totalVoted', 'turnout'
         ));
+    }
+
+    /**
+     * Get real-time vote statistics for a session
+     */
+    public function getVoteStats(VotingSession $votingSession)
+    {
+        // Only allow if session is active or completed
+        if (!in_array($votingSession->status, ['active', 'completed'])) {
+            return response()->json(['error' => 'Session not available'], 403);
+        }
+
+        // Load positions and candidates with vote counts
+        $votingSession->load([
+            'positions.candidates' => function($query) {
+                $query->withCount('votes')->orderBy('votes_count', 'desc');
+            }
+        ]);
+
+        // Calculate total votes
+        $totalVoted = $votingSession->votes()->distinct('voter_id')->count('voter_id');
+
+        // Calculate total voters based on category
+        $totalVoters = 0;
+        if ($votingSession->category === 'course') {
+            $totalVoters = User::students()
+                ->where('department', $votingSession->target_course)
+                ->count();
+        } elseif ($votingSession->category === 'manual') {
+            $totalVoters = $votingSession->manualVoters()->count();
+        } else {
+            $totalVoters = User::students()->count();
+        }
+
+        // Prepare candidate vote counts and progress bars
+        $candidates = [];
+        $progressBars = [];
+        $positionTotals = [];
+
+        foreach ($votingSession->positions as $position) {
+            $positionTotalVotes = $position->candidates->sum('votes_count');
+            $positionTotals[$position->id] = $positionTotalVotes;
+
+            foreach ($position->candidates as $candidate) {
+                $candidates[$candidate->id] = $candidate->votes_count;
+
+                // Calculate percentage for progress bar
+                $percentage = $positionTotalVotes > 0
+                    ? ($candidate->votes_count / $positionTotalVotes * 100)
+                    : 0;
+                $progressBars[$candidate->id] = round($percentage, 1);
+            }
+        }
+
+        return response()->json([
+            'total_voted' => $totalVoted,
+            'total_voters' => $totalVoters,
+            'candidates' => $candidates,
+            'progress_bars' => $progressBars,
+            'position_totals' => $positionTotals,
+            'last_update' => now()->toIso8601String()
+        ]);
     }
 }

@@ -58,5 +58,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/positions/{position}', [Admin\VotingSessionController::class, 'deletePosition'])->name('positions.delete');
         Route::post('/positions/{position}/candidates', [Admin\VotingSessionController::class, 'addCandidate'])->name('positions.candidates.add');
         Route::delete('/candidates/{candidate}', [Admin\VotingSessionController::class, 'removeCandidate'])->name('candidates.delete');
+
+        // ── API Routes for Real-time Updates ───────────────────────────────
+        Route::prefix('api')->name('api.')->group(function () {
+            Route::get('/sessions/{votingSession}/votes', [Admin\VotingSessionController::class, 'getVoteStats'])
+                ->name('session.votes');
+        });
     });
 });
