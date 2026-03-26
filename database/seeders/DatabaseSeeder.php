@@ -1,25 +1,40 @@
 <?php
-
 namespace Database\Seeders;
 
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // Super Admin
+        User::firstOrCreate(
+            ['email' => 'admin@votecast.edu'],
+            [
+                'password'  => Hash::make('admin123'),
+                'full_name' => 'System Administrator',
+                'role'      => 'super_admin',
+                'is_active' => true,
+            ]
+        );
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // Election Admin
+        User::firstOrCreate(
+            ['email' => 'election@votecast.edu'],
+            [
+                'password'  => Hash::make('election123'),
+                'full_name' => 'Election Officer',
+                'role'      => 'election_admin',
+                'is_active' => true,
+            ]
+        );
+
+        $this->command->info('');
+        $this->command->info('✅  Admin accounts ready:');
+        $this->command->info('   Super Admin    →  admin@votecast.edu     /  admin123');
+        $this->command->info('   Election Admin →  election@votecast.edu  /  election123');
+        $this->command->info('');
     }
 }
