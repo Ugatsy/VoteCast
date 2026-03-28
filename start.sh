@@ -15,8 +15,9 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 
-echo "Running migrations..."
+echo "Running migrations and seeders..."
 php artisan migrate --force
+php artisan db:seed --force
 
 echo "Starting PHP-FPM..."
 php-fpm -D
