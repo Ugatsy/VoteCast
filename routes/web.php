@@ -6,10 +6,19 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
+| PUBLIC LANDING PAGE
+|--------------------------------------------------------------------------
+*/
+Route::get('/', function () {
+    return view('landing');
+})->name('landing');
+
+/*
+|--------------------------------------------------------------------------
 | STUDENT ROUTES
 |--------------------------------------------------------------------------
 */
-Route::get('/', [Student\AuthController::class, 'showLanding'])->name('student.landing');
+Route::get('/student/login', [Student\AuthController::class, 'showLanding'])->name('student.landing');
 Route::post('/verify', [Student\AuthController::class, 'verify'])->name('student.verify');
 Route::post('/student/logout', [Student\AuthController::class, 'logout'])->name('student.logout');
 
