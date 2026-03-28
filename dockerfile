@@ -1,4 +1,4 @@
-FROM php:8.3-fpm
+FROM php:8.4-fpm
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -52,4 +52,4 @@ COPY nginx.conf /etc/nginx/sites-available/default
 EXPOSE 10000
 
 # Start PHP-FPM and Nginx
-CMD php artisan migrate --force && service php8.3-fpm start && nginx -g 'daemon off;'
+CMD php artisan migrate --force && service php8.4-fpm start && nginx -g 'daemon off;'
