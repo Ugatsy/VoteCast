@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+echo "Fixing permissions..."
+chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
+
 echo "Clearing cache..."
 php artisan config:clear
 php artisan view:clear
@@ -18,7 +22,4 @@ echo "Starting PHP-FPM..."
 php-fpm -D
 
 echo "Starting Nginx..."
-nginx -g 'daemon off;' &
-
-echo "Tailing Laravel log..."
-tail -f /var/www/storage/logs/laravel.log
+nginx -g 'daemon off;'
