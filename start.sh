@@ -5,7 +5,8 @@ echo "Fixing permissions..."
 chmod -R 775 /var/www/storage /var/www/bootstrap/cache
 chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
 
-echo "Clearing cache..."
+echo "Setting trusted proxies..."
+php artisan config:clear
 php artisan config:clear
 php artisan view:clear
 php artisan route:clear
@@ -15,9 +16,8 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 
-echo "Running migrations and seeders..."
+echo "Running migrations..."
 php artisan migrate --force
-php artisan db:seed --force
 
 echo "Starting PHP-FPM..."
 php-fpm -D
