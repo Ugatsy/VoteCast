@@ -48,6 +48,7 @@ RUN chmod -R 775 /var/www/storage /var/www/bootstrap/cache
 
 # Copy Nginx configuration
 COPY nginx.conf /etc/nginx/sites-available/default
+RUN ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 
 # Expose port 10000 (Render uses 10000)
 EXPOSE 10000
