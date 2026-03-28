@@ -53,4 +53,4 @@ COPY nginx.conf /etc/nginx/sites-available/default
 EXPOSE 10000
 
 # Start PHP-FPM and Nginx
-CMD php artisan migrate --force && php-fpm8.4 -D && nginx -g 'daemon off;'
+CMD php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'
