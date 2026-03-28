@@ -53,4 +53,7 @@ COPY nginx.conf /etc/nginx/sites-available/default
 EXPOSE 10000
 
 # Start PHP-FPM and Nginx
-CMD php artisan migrate --force && php-fpm -D && nginx -g 'daemon off;'
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+CMD ["/start.sh"]
