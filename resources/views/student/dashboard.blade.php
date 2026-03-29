@@ -27,8 +27,6 @@
             padding: 1.25rem 1.5rem;
             transition: all 0.3s;
         }
-        .profile-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; }
-        .profile-value { font-weight: 600; font-size: 0.95rem; color: #1e293b; }
 
         .election-card {
             background: #fff; border-radius: 14px;
@@ -45,6 +43,7 @@
             transition: width 0.5s ease;
         }
         .election-card.voted .accent-bar { background: #22c55e; }
+        .election-card.completed .accent-bar { background: #8b5cf6; }
 
         .btn-vote-now {
             background: #1a56db; color: #fff; border: none;
@@ -54,6 +53,15 @@
             display: inline-block;
         }
         .btn-vote-now:hover { background: #1447c0; color: #fff; transform: translateY(-1px); }
+
+        .btn-view-results {
+            background: #8b5cf6; color: #fff; border: none;
+            border-radius: 8px; padding: 0.55rem 1.25rem;
+            font-weight: 600; font-size: 0.9rem;
+            text-decoration: none; transition: all 0.2s;
+            display: inline-block;
+        }
+        .btn-view-results:hover { background: #7c3aed; color: #fff; transform: translateY(-1px); }
 
         .btn-view-receipt {
             background: #f0f4ff; color: #1a56db; border: 1px solid #1a56db;
@@ -73,6 +81,8 @@
         }
         .dot-active  { background: #22c55e; animation: pulse 1.5s infinite; }
         .dot-voted   { background: #94a3b8; }
+        .dot-completed { background: #8b5cf6; }
+
         @keyframes pulse {
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.4; transform: scale(1.2); }
@@ -97,19 +107,77 @@
             letter-spacing: 0.5px;
         }
 
-        .receipt-id-box {
-            background: #f0f4ff;
-            border: 2px dashed #93c5fd;
-            border-radius: 12px;
-            padding: 1rem;
+        .candidate-result-card {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s;
         }
 
-        .receipt-id {
-            font-family: 'Courier New', monospace;
-            background: #f8fafc;
-            padding: 0.5rem;
-            border-radius: 8px;
-            font-size: 0.9rem;
+        .candidate-result-card.winner {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-left: 4px solid #f59e0b;
+        }
+
+        .candidate-result-card.leading {
+            background: #e0e7ff;
+            border-left: 4px solid #1a56db;
+        }
+
+        .progress-bar-custom {
+            transition: width 0.5s ease;
+        }
+
+        .winner-crown {
+            color: #f59e0b;
+            animation: bounce 0.5s ease;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+
+        .refresh-btn {
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            transform: rotate(180deg);
+        }
+
+        .live-badge {
+            background: #ef4444;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        .results-modal .modal-content {
+            border-radius: 20px;
+            max-height: 80vh;
+        }
+
+        .results-modal .modal-body {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .turnout-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #1a56db, #3b82f6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        .turnout-circle span {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: white;
         }
 
         @keyframes slideIn {
@@ -131,11 +199,6 @@
             background: #dcfce7;
             color: #15803d;
             animation: pulse 2s infinite;
-        }
-
-        .badge-upcoming {
-            background: #fef3c7;
-            color: #d97706;
         }
     </style>
 </head>
@@ -211,7 +274,7 @@
                     </div>
                     <div class="col-6">
                         <div class="stats-number text-success">{{ $votedSessions->count() }}</div>
-                        <div class="stats-label">Completed Votes</div>
+                        <div class="stats-label">Votes Cast</div>
                     </div>
                 </div>
             </div>
@@ -314,12 +377,14 @@
             </div>
             @endforelse
 
-            {{-- Already Voted --}}
+            {{-- Voted but Still Active (Live Results) --}}
             @if($votedSessions->count())
             <div class="section-title mt-4">
                 <span class="dot dot-voted"></span>
-                Already Voted
-                <span class="badge bg-secondary rounded-pill">{{ $votedSessions->count() }}</span>
+                Live Election Results
+                <span class="badge bg-success rounded-pill">
+                    <i class="bi bi-eye me-1"></i>Real-time
+                </span>
             </div>
 
             @foreach($votedSessions as $session)
@@ -333,24 +398,25 @@
                                 <span class="badge" style="background:#dcfce7;color:#166534;">
                                     <i class="bi bi-check2-circle me-1"></i>Voted
                                 </span>
+                                <span class="badge live-badge">
+                                    <i class="bi bi-broadcast me-1"></i>LIVE
+                                </span>
                             </div>
                             <div class="d-flex gap-3 flex-wrap mt-1">
                                 <div style="font-size:0.78rem;color:#94a3b8">
-                                    <i class="bi bi-calendar-check me-1"></i>Voted on
-                                    @php
-                                        $vote = $session->votes()->where('voter_id', $user->id)->first();
-                                        $voteDate = $vote ? $vote->created_at : $session->updated_at;
-                                    @endphp
-                                    {{ $voteDate ? $voteDate->format('M d, Y h:i A') : 'Date not available' }}
+                                    <i class="bi bi-calendar-check me-1"></i>Ends {{ $session->end_date->format('M d, Y h:i A') }}
                                 </div>
                                 <div style="font-size:0.78rem;color:#94a3b8">
-                                    <i class="bi bi-receipt me-1"></i>Receipt available
+                                    <i class="bi bi-people me-1"></i>{{ $session->positions->count() }} positions
                                 </div>
                             </div>
                         </div>
-                        <div class="ms-3">
+                        <div class="ms-3 d-flex gap-2">
+                            <button class="btn-view-results" onclick="showLiveResults({{ $session->id }})">
+                                <i class="bi bi-bar-chart-fill me-1"></i>Live Results
+                            </button>
                             <button class="btn-view-receipt" onclick="viewReceipt({{ $session->id }})">
-                                <i class="bi bi-receipt me-1"></i>View Receipt
+                                <i class="bi bi-receipt me-1"></i>Receipt
                             </button>
                         </div>
                     </div>
@@ -358,6 +424,70 @@
             </div>
             @endforeach
             @endif
+
+            {{-- Completed Sessions with Final Results --}}
+            @if(isset($completedSessions) && $completedSessions->count())
+            <div class="section-title mt-4">
+                <span class="dot dot-completed"></span>
+                Completed Elections
+                <span class="badge bg-secondary rounded-pill">Final Results</span>
+            </div>
+
+            @foreach($completedSessions as $session)
+            <div class="election-card completed mb-3">
+                <div class="accent-bar" style="width: 100%"></div>
+                <div class="p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <div style="font-weight:600;color:#1e293b">{{ $session->title }}</div>
+                                <span class="badge" style="background:#e9d5ff;color:#6b21a5;">
+                                    <i class="bi bi-trophy me-1"></i>Completed
+                                </span>
+                            </div>
+                            <div class="d-flex gap-3 flex-wrap mt-1">
+                                <div style="font-size:0.78rem;color:#94a3b8">
+                                    <i class="bi bi-calendar-check me-1"></i>Ended {{ $session->end_date->format('M d, Y') }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ms-3">
+                            <button class="btn-view-results" onclick="showFinalResults({{ $session->id }})">
+                                <i class="bi bi-trophy me-1"></i>View Winners
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            @endforeach
+            @endif
+        </div>
+    </div>
+</div>
+
+{{-- Live Results Modal --}}
+<div class="modal fade" id="resultsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content results-modal">
+            <div class="modal-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white;">
+                <h5 class="modal-title">
+                    <i class="bi bi-bar-chart-fill me-2"></i>
+                    <span id="resultsModalTitle">Live Election Results</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="resultsModalContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary"></div>
+                    <p class="mt-2">Loading results...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary refresh-btn" onclick="refreshCurrentResults()">
+                    <i class="bi bi-arrow-repeat me-1"></i>Refresh
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -390,12 +520,200 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // View receipt function with better error handling
+    let currentSessionId = null;
+    let autoRefreshInterval = null;
+
+    // Show live results
+    async function showLiveResults(sessionId) {
+        currentSessionId = sessionId;
+        const modal = new bootstrap.Modal(document.getElementById('resultsModal'));
+        const content = document.getElementById('resultsModalContent');
+
+        content.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary"></div>
+                <p class="mt-2">Loading live results...</p>
+            </div>
+        `;
+
+        modal.show();
+        await loadResults(sessionId);
+
+        // Auto-refresh every 10 seconds for live results
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+        autoRefreshInterval = setInterval(() => loadResults(sessionId, true), 10000);
+    }
+
+    // Show final results (no auto-refresh)
+    async function showFinalResults(sessionId) {
+        currentSessionId = sessionId;
+        const modal = new bootstrap.Modal(document.getElementById('resultsModal'));
+        const content = document.getElementById('resultsModalContent');
+
+        content.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary"></div>
+                <p class="mt-2">Loading final results...</p>
+            </div>
+        `;
+
+        modal.show();
+        await loadResults(sessionId, false);
+
+        // Clear auto-refresh for final results
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
+
+    // Load results from API
+    async function loadResults(sessionId, isLive = true) {
+        try {
+            const response = await fetch(`/results/${sessionId}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content
+                }
+            });
+
+            if (!response.ok) throw new Error('Failed to load results');
+
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error);
+
+            document.getElementById('resultsModalTitle').innerHTML = `
+                <i class="bi ${isLive ? 'bi-broadcast' : 'bi-trophy'} me-2"></i>
+                ${escapeHtml(data.session_title)}
+                <span class="badge ${isLive ? 'bg-danger' : 'bg-warning'} ms-2">
+                    ${isLive ? 'LIVE UPDATES' : 'FINAL RESULTS'}
+                </span>
+            `;
+
+            const turnoutColor = data.turnout >= 50 ? 'success' : (data.turnout >= 25 ? 'warning' : 'danger');
+
+            let html = `
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-light border-0 text-center p-3">
+                            <div class="small text-muted">Total Voters</div>
+                            <div class="h3 mb-0 fw-bold">${data.total_voters.toLocaleString()}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light border-0 text-center p-3">
+                            <div class="small text-muted">Votes Cast</div>
+                            <div class="h3 mb-0 fw-bold text-success">${data.total_voted.toLocaleString()}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light border-0 text-center p-3">
+                            <div class="small text-muted">Turnout</div>
+                            <div class="h3 mb-0 fw-bold text-${turnoutColor}">${data.turnout}%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="progress mb-4" style="height: 8px;">
+                    <div class="progress-bar bg-${turnoutColor}" style="width: ${data.turnout}%"></div>
+                </div>
+
+                <div class="text-center mb-3">
+                    <small class="text-muted">
+                        <i class="bi bi-clock me-1"></i>Last updated: ${new Date(data.last_update).toLocaleTimeString()}
+                        ${isLive ? '<span class="ms-2 text-success"><i class="bi bi-circle-fill fs-6"></i> Auto-refreshing</span>' : ''}
+                    </small>
+                </div>
+            `;
+
+            for (const position of data.results) {
+                html += `
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-white py-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="fw-bold mb-0">
+                                    <i class="bi bi-person-badge me-2 text-primary"></i>
+                                    ${escapeHtml(position.title)}
+                                    ${position.max_winners > 1 ? `<span class="badge bg-info ms-2">${position.max_winners} winner(s)</span>` : ''}
+                                </h6>
+                                <span class="badge bg-secondary">${position.total_votes} total votes</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                `;
+
+                for (const candidate of position.candidates) {
+                    const isWinner = candidate.is_winner && position.max_winners === 1;
+                    const isLeading = candidate.is_winner && position.max_winners > 1;
+
+                    html += `
+                        <div class="candidate-result-card mb-2 ${isWinner ? 'winner' : (isLeading ? 'leading' : '')}">
+                            <div class="d-flex align-items-center gap-3">
+                                <img src="${candidate.photo}" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;" alt="">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="fw-semibold">
+                                                ${escapeHtml(candidate.name)}
+                                                ${isWinner ? '<span class="winner-crown ms-1">🏆</span>' : ''}
+                                                ${isLeading ? '<span class="ms-1 text-primary">⭐ Leading</span>' : ''}
+                                            </div>
+                                            <div class="small text-muted">${escapeHtml(candidate.section)}</div>
+                                        </div>
+                                        <div class="text-end">
+                                            <div class="fw-bold h5 mb-0">${candidate.vote_count}</div>
+                                            <div class="small text-muted">${candidate.percentage}%</div>
+                                        </div>
+                                    </div>
+                                    <div class="progress mt-2" style="height: 6px;">
+                                        <div class="progress-bar progress-bar-custom ${isWinner ? 'bg-success' : 'bg-primary'}"
+                                             style="width: ${candidate.percentage}%">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (position.candidates.length === 0) {
+                    html += `<p class="text-muted text-center py-3">No candidates for this position.</p>`;
+                }
+
+                html += `</div></div>`;
+            }
+
+            document.getElementById('resultsModalContent').innerHTML = html;
+
+        } catch (error) {
+            console.error('Error loading results:', error);
+            document.getElementById('resultsModalContent').innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-exclamation-triangle text-danger fs-1"></i>
+                    <p class="mt-3 text-danger fw-bold">Failed to load results</p>
+                    <p class="small text-muted">${escapeHtml(error.message)}</p>
+                    <button class="btn btn-outline-primary btn-sm mt-2" onclick="loadResults(${sessionId}, ${isLive})">
+                        <i class="bi bi-arrow-repeat me-1"></i>Try Again
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    // Refresh current results
+    function refreshCurrentResults() {
+        if (currentSessionId) {
+            const isLive = document.getElementById('resultsModalTitle').innerHTML.includes('LIVE');
+            loadResults(currentSessionId, isLive);
+        }
+    }
+
+    // View receipt function
     async function viewReceipt(sessionId) {
         const modal = new bootstrap.Modal(document.getElementById('receiptModal'));
         const receiptContent = document.getElementById('receiptContent');
 
-        // Show loading state
         receiptContent.innerHTML = `
             <div class="text-center py-4">
                 <div class="spinner-border text-primary"></div>
@@ -407,77 +725,49 @@
 
         try {
             const response = await fetch(`/receipt/${sessionId}`, {
-                method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}',
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'same-origin'
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content
+                }
             });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-            }
+            if (!response.ok) throw new Error('Failed to load receipt');
 
             const data = await response.json();
-
             const votedDate = new Date(data.voted_at);
-            const formattedDate = votedDate.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
+            const formattedDate = votedDate.toLocaleString();
 
             receiptContent.innerHTML = `
-                <div class="receipt-id-box text-center mb-3">
+                <div class="receipt-id-box text-center mb-3" style="background: #f0f4ff; border-radius: 12px; padding: 1rem;">
                     <div class="small text-muted mb-1">Receipt ID</div>
-                    <div class="receipt-id fw-bold" style="font-family: monospace; font-size: 1.1rem;">${escapeHtml(data.receipt_id)}</div>
+                    <div class="fw-bold" style="font-family: monospace; font-size: 1.1rem;">${escapeHtml(data.receipt_id)}</div>
                     <div class="small text-muted mt-1">${formattedDate}</div>
                 </div>
 
                 <h6 class="fw-bold mb-3">Your Votes for: ${escapeHtml(data.session_title)}</h6>
 
-                ${data.votes.length === 0 ? `
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle me-2"></i>
-                        No votes found for this election.
+                ${data.votes.map(vote => `
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <div>
+                            <div class="fw-semibold">${escapeHtml(vote.position)}</div>
+                            <div class="small text-muted">${escapeHtml(vote.candidate)}</div>
+                        </div>
+                        <i class="bi bi-check-circle-fill text-success fs-5"></i>
                     </div>
-                ` : `
-                    <div class="list-group list-group-flush mb-3">
-                        ${data.votes.map((vote, index) => `
-                            <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                                <div>
-                                    <div class="fw-semibold">${escapeHtml(vote.position)}</div>
-                                    <div class="small text-muted">${escapeHtml(vote.candidate)}</div>
-                                    <div class="small text-muted">${escapeHtml(vote.candidate_section)}</div>
-                                </div>
-                                <i class="bi bi-check-circle-fill text-success fs-5"></i>
-                            </div>
-                        `).join('')}
-                    </div>
-                `}
+                `).join('')}
 
                 <div class="alert alert-info mt-3 mb-0">
                     <i class="bi bi-shield-check me-2"></i>
-                    This receipt confirms your vote was securely recorded on ${formattedDate}.
-                    <br>
-                    <small class="text-muted">Receipt ID: ${escapeHtml(data.receipt_id)}</small>
+                    This receipt confirms your vote was securely recorded.
                 </div>
             `;
 
         } catch (error) {
-            console.error('Receipt error:', error);
             receiptContent.innerHTML = `
                 <div class="text-center py-4">
                     <i class="bi bi-exclamation-triangle text-danger fs-1"></i>
                     <p class="mt-3 text-danger fw-bold">Failed to load receipt</p>
-                    <p class="small text-muted">${escapeHtml(error.message)}</p>
                     <button class="btn btn-outline-primary btn-sm mt-2" onclick="viewReceipt(${sessionId})">
                         <i class="bi bi-arrow-repeat me-1"></i>Try Again
                     </button>
@@ -493,6 +783,14 @@
         div.textContent = text;
         return div.innerHTML;
     }
+
+    // Clean up interval when modal is closed
+    document.getElementById('resultsModal').addEventListener('hidden.bs.modal', function () {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    });
 
     // Add animation on page load
     document.addEventListener('DOMContentLoaded', () => {

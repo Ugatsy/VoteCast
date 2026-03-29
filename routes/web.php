@@ -27,6 +27,7 @@ Route::middleware('student')->group(function () {
     Route::get('/vote/{votingSession}', [Student\VotingBallotController::class, 'show'])->name('student.ballot');
     Route::post('/vote/{votingSession}', [Student\VotingBallotController::class, 'submit'])->name('student.vote');
     Route::get('/confirmation', [Student\VotingBallotController::class, 'confirmation'])->name('student.confirmation');
+    Route::get('/results/{session}', [Student\DashboardController::class, 'getLiveResults'])->name('student.results.live');
 
     // Receipt routes
     Route::get('/receipt/{session}', [Student\VotingBallotController::class, 'getReceipt'])->name('student.receipt');

@@ -12,7 +12,6 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
 
-        // Debug: Log user info
         Log::info('Student dashboard accessed', [
             'user_id' => $user->id,
             'student_id' => $user->student_id,
@@ -24,34 +23,11 @@ class DashboardController extends Controller
         // Get all active sessions (status = 'active')
         $allActiveSessions = VotingSession::where('status', 'active')->get();
 
-        // Debug: Log active sessions found
-        Log::info('Active sessions found', [
-            'count' => $allActiveSessions->count(),
-            'sessions' => $allActiveSessions->map(function($s) {
-                return [
-                    'id' => $s->id,
-                    'title' => $s->title,
-                    'category' => $s->category,
-                    'target_course' => $s->target_course,
-                    'target_department' => $s->target_department,
-                    'status' => $s->status
-                ];
-            })
-        ]);
-
         // Filter to only sessions this student is eligible for
         $eligibleSessions = collect();
 
         foreach ($allActiveSessions as $session) {
             $isEligible = $this->checkEligibility($session, $user);
-
-            Log::info('Eligibility check', [
-                'session_id' => $session->id,
-                'session_title' => $session->title,
-                'user_department' => $user->department,
-                'user_student_id' => $user->student_id,
-                'is_eligible' => $isEligible
-            ]);
 
             if ($isEligible) {
                 $eligibleSessions->push($session);
@@ -64,27 +40,110 @@ class DashboardController extends Controller
             ->pluck('voting_session_id')
             ->toArray();
 
-        Log::info('Voted sessions', [
-            'voted_session_ids' => $votedSessionIds
-        ]);
-
         // Split into pending vs already voted
         $pendingSessions = $eligibleSessions->filter(function($session) use ($votedSessionIds) {
             return !in_array($session->id, $votedSessionIds);
         })->values();
 
         $votedSessions = VotingSession::whereIn('id', $votedSessionIds)
-            ->where('status', 'active') // Only show active voted sessions
+            ->where('status', 'active')
+            ->with(['positions.candidates' => function($query) {
+                $query->withCount('votes')->orderBy('votes_count', 'desc');
+            }, 'positions.candidates.student'])
             ->latest()
             ->get();
 
-        Log::info('Final session counts', [
-            'eligible_count' => $eligibleSessions->count(),
-            'pending_count' => $pendingSessions->count(),
-            'voted_count' => $votedSessions->count()
-        ]);
+        // Get completed sessions for results
+        $completedSessions = VotingSession::where('status', 'completed')
+            ->whereIn('id', $votedSessionIds)
+            ->with(['positions.candidates' => function($query) {
+                $query->withCount('votes')->orderBy('votes_count', 'desc');
+            }, 'positions.candidates.student'])
+            ->latest()
+            ->take(3)
+            ->get();
 
-        return view('student.dashboard', compact('user', 'pendingSessions', 'votedSessions'));
+        return view('student.dashboard', compact('user', 'pendingSessions', 'votedSessions', 'completedSessions'));
+    }
+
+    /**
+     * Get live results for a session (API endpoint)
+     */
+    public function getLiveResults($sessionId)
+    {
+        try {
+            $session = VotingSession::with([
+                'positions.candidates' => function($query) {
+                    $query->withCount('votes')->orderBy('votes_count', 'desc');
+                },
+                'positions.candidates.student'
+            ])->findOrFail($sessionId);
+
+            // Calculate total voters
+            $totalVoters = 0;
+            if ($session->category === 'course') {
+                $totalVoters = \App\Models\User::students()
+                    ->where('department', $session->target_course)
+                    ->count();
+            } elseif ($session->category === 'manual') {
+                $totalVoters = $session->manualVoters()->count();
+            } else {
+                $totalVoters = \App\Models\User::students()->count();
+            }
+
+            $totalVoted = $session->votes()->distinct('voter_id')->count('voter_id');
+            $turnout = $totalVoters > 0 ? round(($totalVoted / $totalVoters) * 100, 1) : 0;
+
+            $results = [];
+            foreach ($session->positions as $position) {
+                $totalVotes = $position->candidates->sum('votes_count');
+                $candidates = [];
+
+                foreach ($position->candidates as $candidate) {
+                    $percentage = $totalVotes > 0 ? round(($candidate->votes_count / $totalVotes) * 100, 1) : 0;
+                    $candidates[] = [
+                        'id' => $candidate->id,
+                        'name' => $candidate->student->full_name,
+                        'section' => $candidate->student->section,
+                        'photo' => $candidate->photo_url,
+                        'vote_count' => $candidate->votes_count,
+                        'percentage' => $percentage,
+                        'is_winner' => $candidate->votes_count > 0 &&
+                            $candidate->votes_count == $position->candidates->max('votes_count')
+                    ];
+                }
+
+                $results[] = [
+                    'id' => $position->id,
+                    'title' => $position->title,
+                    'max_winners' => $position->max_winners,
+                    'total_votes' => $totalVotes,
+                    'candidates' => $candidates
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'session_title' => $session->title,
+                'status' => $session->status,
+                'total_voters' => $totalVoters,
+                'total_voted' => $totalVoted,
+                'turnout' => $turnout,
+                'results' => $results,
+                'last_update' => now()->toIso8601String()
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching live results', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to load results'
+            ], 500);
+        }
     }
 
     /**
@@ -92,23 +151,18 @@ class DashboardController extends Controller
      */
     private function checkEligibility($session, $user)
     {
-        // Check if session is active
         if ($session->status !== 'active') {
             return false;
         }
 
-        // Check based on category
         switch ($session->category) {
             case 'department':
-                // All students are eligible for department-wide elections
                 return true;
 
             case 'course':
-                // Check if student's department matches target course
                 return $session->target_course === $user->department;
 
             case 'manual':
-                // Check if student is in the manual voters list
                 return $session->manualVoters()
                     ->where('user_id', $user->id)
                     ->exists();
