@@ -22,5 +22,8 @@ php artisan migrate --force
 echo "Starting PHP-FPM..."
 php-fpm -D
 
+echo "Starting scheduler..."
+(while true; do php /var/www/artisan schedule:run >> /dev/null 2>&1; sleep 60; done) &
+
 echo "Starting Nginx..."
 nginx -g 'daemon off;'
