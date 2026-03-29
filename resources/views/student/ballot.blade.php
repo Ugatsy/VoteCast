@@ -61,7 +61,7 @@
         <span>Click on any candidate card to vote for them. For positions with multiple winners, you can select up to the specified limit.</span>
     </div>
 
-    <div class="bg-white rounded-xl px-4 py-3 mb-4 border border-slate-200 flex justify-between items-center flex-wrap gap-2">
+    {{-- <div class="bg-white rounded-xl px-4 py-3 mb-4 border border-slate-200 flex justify-between items-center flex-wrap gap-2">
         <div class="flex gap-4">
             <span class="flex items-center gap-2 text-sm">
                 <span class="w-6 h-6 rounded-full bg-green-500/10 text-green-700 flex items-center justify-center text-xs font-bold" id="votedCountBadge">0</span>
@@ -72,7 +72,7 @@
                 Positions skipped
             </span>
         </div>
-    </div>
+    </div> --}}
 
     <form method="POST" action="{{ route('student.vote', $votingSession) }}" id="ballotForm">
         @csrf
