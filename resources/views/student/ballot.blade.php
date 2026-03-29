@@ -157,18 +157,6 @@
         .btn-submit:hover:not(:disabled) { background: #1447c0; transform: translateY(-1px); }
         .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        .btn-abstain-all {
-            background: #f59e0b; color: #fff; border: none;
-            border-radius: 8px; padding: 0.5rem 1rem;
-            font-size: 0.85rem;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        .btn-abstain-all:hover {
-            background: #d97706;
-            transform: translateY(-1px);
-        }
-
         .alert {
             border-radius: 12px;
         }
@@ -208,6 +196,22 @@
         .summary-badge.skipped {
             background: #f59e0b20;
             color: #b45309;
+        }
+
+        .instruction-note {
+            background: #e0e7ff;
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: #1e40af;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .instruction-note i {
+            font-size: 1rem;
         }
     </style>
 </head>
@@ -256,6 +260,12 @@
     </div>
     @endif
 
+    {{-- Instruction Note --}}
+    <div class="instruction-note">
+        <i class="bi bi-info-circle-fill"></i>
+        <span>Select candidates you want to vote for. Leave all unchecked to skip a position. Each position requires either a vote or skip to proceed.</span>
+    </div>
+
     {{-- Summary Bar --}}
     <div class="summary-bar">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -269,9 +279,6 @@
                     <span>Positions skipped</span>
                 </span>
             </div>
-            <button type="button" class="btn-abstain-all" onclick="skipAllPositions()">
-                <i class="bi bi-eye-slash me-1"></i>Skip All Positions
-            </button>
         </div>
     </div>
 
@@ -364,7 +371,7 @@
 
         <p class="text-center text-muted small mt-3">
             <i class="bi bi-lock me-1"></i>Your vote is anonymous and securely recorded.
-            <br>You may abstain from any position by checking the skip option.
+            <br>You may abstain from any position by checking the skip option. Each position requires a decision.
         </p>
     </form>
 </div>
@@ -473,7 +480,9 @@
                 // If we have any votes for this position, remove skip status
                 if (selections[posId] && selections[posId].length > 0) {
                     skippedPositions[posId] = false;
+                    const skipOption = document.getElementById(`skipOption${posId}`);
                     const skipCheckbox = document.getElementById(`skipCheckbox${posId}`);
+                    if (skipOption) skipOption.classList.remove('selected');
                     if (skipCheckbox) skipCheckbox.classList.remove('selected');
                 }
 
@@ -520,36 +529,6 @@
             }
 
             updateProgress();
-        };
-
-        // Skip all positions
-        window.skipAllPositions = function() {
-            if (confirm('Skip all positions? This will clear any votes you\'ve already made.')) {
-                // Clear all candidate selections
-                document.querySelectorAll('.candidate-checkbox').forEach(cb => {
-                    cb.checked = false;
-                    const posId = cb.dataset.position;
-                    const label = document.getElementById(`label-${posId}-${cb.value}`);
-                    if (label) label.classList.remove('selected');
-                    cb.disabled = false;
-                });
-
-                // Clear selections
-                selections = {};
-
-                // Skip all positions
-                for (let posId = 1; posId <= {{ $votingSession->positions->count() }}; posId++) {
-                    skippedPositions[posId] = true;
-                    const skipOption = document.getElementById(`skipOption${posId}`);
-                    const skipCheckbox = document.getElementById(`skipCheckbox${posId}`);
-                    const positionCard = document.getElementById(`posCard${posId}`);
-                    if (skipOption) skipOption.classList.add('selected');
-                    if (skipCheckbox) skipCheckbox.classList.add('selected');
-                    if (positionCard) positionCard.classList.add('skipped');
-                }
-
-                updateProgress();
-            }
         };
 
         // Initialize any pre-selected values

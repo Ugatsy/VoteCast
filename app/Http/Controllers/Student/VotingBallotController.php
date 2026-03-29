@@ -240,14 +240,23 @@ class VotingBallotController extends Controller
                 ->where('user_id', $user->id)
                 ->first();
 
-            $receiptId = $participation ? $participation->receipt_id : null;
-            $hasVotes = $participation ? $participation->has_votes : false;
+            if (!$participation && $votes->isEmpty()) {
+                return response()->json([
+                    'error' => 'You did not participate in this election.',
+                    'has_participated' => false
+                ], 404);
+            }
+
+            $receiptId = $participation ? $participation->receipt_id : ($votes->isNotEmpty() ? $votes->first()->receipt_id : null);
+            $hasVotes = $participation ? $participation->has_votes : $votes->isNotEmpty();
+            $votedAt = $participation ? $participation->voted_at : ($votes->isNotEmpty() ? $votes->first()->created_at : null);
 
             return response()->json([
                 'receipt_id' => $receiptId,
-                'voted_at' => $participation ? $participation->voted_at->toISOString() : now()->toISOString(),
+                'voted_at' => $votedAt ? $votedAt->toISOString() : now()->toISOString(),
                 'session_title' => $votingSession->title,
                 'has_votes' => $hasVotes,
+                'has_participated' => $participation !== null || $votes->isNotEmpty(),
                 'votes' => $votes->map(function($vote) {
                     return [
                         'position' => $vote->position ? $vote->position->title : 'Unknown Position',
@@ -264,7 +273,7 @@ class VotingBallotController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            return response()->json(['error' => 'Failed to load receipt'], 500);
+            return response()->json(['error' => 'Failed to load receipt: ' . $e->getMessage()], 500);
         }
     }
 }

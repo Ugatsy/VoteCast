@@ -74,19 +74,15 @@ class VotingSession extends Model
         switch ($this->category) {
             case 'course':
                 return $this->target_course === $user->department;
-
             case 'section':
                 return $this->target_section === $user->section;
-
             case 'department':
                 if (empty($this->target_department)) {
                     return true;
                 }
                 return $this->target_department === $user->department;
-
             case 'manual':
                 return $this->manualVoters()->where('user_id', $user->id)->exists();
-
             default:
                 return false;
         }

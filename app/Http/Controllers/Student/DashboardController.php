@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
@@ -21,10 +22,9 @@ class DashboardController extends Controller
             'section'    => $user->section
         ]);
 
-        // Get all active sessions
         $allActiveSessions = VotingSession::where('status', 'active')->get();
+        $allCompletedSessions = VotingSession::where('status', 'completed')->get();
 
-        // Filter eligible sessions
         $eligibleSessions = collect();
         foreach ($allActiveSessions as $session) {
             if ($this->checkEligibility($session, $user)) {
@@ -32,12 +32,17 @@ class DashboardController extends Controller
             }
         }
 
-        // Sessions the student has participated in
+        $eligibleCompletedSessions = collect();
+        foreach ($allCompletedSessions as $session) {
+            if ($this->checkEligibilityForCompleted($session, $user)) {
+                $eligibleCompletedSessions->push($session);
+            }
+        }
+
         $participatedSessionIds = Participation::where('user_id', $user->id)
             ->pluck('voting_session_id')
             ->toArray();
 
-        // Also check votes for backward compatibility
         $votedSessionIds = Vote::where('voter_id', $user->id)
             ->distinct('voting_session_id')
             ->pluck('voting_session_id')
@@ -45,30 +50,32 @@ class DashboardController extends Controller
 
         $allDoneIds = array_unique(array_merge($participatedSessionIds, $votedSessionIds));
 
-        // Pending = eligible but not voted yet
-        $pendingSessions = $eligibleSessions->filter(function($session) use ($allDoneIds) {
+        $pendingSessions = $eligibleSessions->filter(function ($session) use ($allDoneIds) {
             return !in_array($session->id, $allDoneIds);
         })->values();
 
-        // Voted sessions that are still active (show live results)
-        $votedSessions = VotingSession::whereIn('id', $allDoneIds)
+        $votedActiveSessions = VotingSession::whereIn('id', $allDoneIds)
             ->where('status', 'active')
             ->with('positions')
             ->latest()
             ->get();
 
-        // Completed sessions the student voted in (show final results)
-        $completedSessions = VotingSession::whereIn('id', $allDoneIds)
+        $completedVotedSessions = VotingSession::whereIn('id', $allDoneIds)
             ->where('status', 'completed')
             ->with('positions')
             ->latest()
             ->get();
 
+        $missedSessions = $eligibleCompletedSessions->filter(function ($session) use ($allDoneIds) {
+            return !in_array($session->id, $allDoneIds);
+        })->values();
+
         return view('student.dashboard', compact(
             'user',
             'pendingSessions',
-            'votedSessions',
-            'completedSessions'
+            'votedActiveSessions',
+            'completedVotedSessions',
+            'missedSessions'
         ));
     }
 
@@ -84,19 +91,18 @@ class DashboardController extends Controller
                 'positions.candidates.student'
             ])->findOrFail($sessionId);
 
-            // Only allow if student participated in this session
-            $hasParticipated = Participation::where('voting_session_id', $sessionId)
-                ->where('user_id', $user->id)
-                ->exists();
+            $isEligible = false;
 
-            $hasVoted = Vote::where('voting_session_id', $sessionId)
-                ->where('voter_id', $user->id)
-                ->exists();
+            if ($session->status === 'active') {
+                $isEligible = $this->checkEligibility($session, $user);
+            } elseif ($session->status === 'completed') {
+                $isEligible = $this->checkEligibilityForCompleted($session, $user);
+            }
 
-            if (!$hasParticipated && !$hasVoted) {
+            if (!$isEligible) {
                 return response()->json([
                     'success' => false,
-                    'error'   => 'You have not voted in this election.'
+                    'error'   => 'You are not eligible to view results for this election.'
                 ], 403);
             }
 
@@ -113,12 +119,34 @@ class DashboardController extends Controller
 
             $results = $session->positions->map(function($position) {
                 $totalVotes = $position->candidates->sum('votes_count');
-                $maxVotes   = $position->candidates->max('votes_count') ?? 0;
+                $sortedCandidates = $position->candidates->sortByDesc('votes_count')->values();
+                $maxWinners = $position->max_winners;
+                $winners = [];
 
-                $candidates = $position->candidates->map(function($candidate) use ($totalVotes, $maxVotes) {
+                if ($sortedCandidates->count() > 0) {
+                    $topCandidates = $sortedCandidates->take($maxWinners);
+                    $winnerVoteCounts = $topCandidates->pluck('votes_count')->toArray();
+
+                    if ($sortedCandidates->count() > $maxWinners) {
+                        $lastWinnerVoteCount = $winnerVoteCounts[$maxWinners - 1] ?? 0;
+                        $nextCandidateVoteCount = $sortedCandidates[$maxWinners]->votes_count ?? 0;
+
+                        if ($lastWinnerVoteCount == $nextCandidateVoteCount) {
+                            $winners = $sortedCandidates->filter(function($candidate) use ($lastWinnerVoteCount) {
+                                return $candidate->votes_count == $lastWinnerVoteCount;
+                            })->pluck('id')->toArray();
+                        } else {
+                            $winners = $topCandidates->pluck('id')->toArray();
+                        }
+                    } else {
+                        $winners = $topCandidates->pluck('id')->toArray();
+                    }
+                }
+
+                $candidates = $position->candidates->map(function($candidate) use ($totalVotes, $winners) {
                     $voteCount  = $candidate->votes_count;
                     $percentage = $totalVotes > 0 ? round(($voteCount / $totalVotes) * 100, 1) : 0;
-                    $isWinner   = $voteCount > 0 && $voteCount === $maxVotes;
+                    $isWinner   = in_array($candidate->id, $winners);
 
                     return [
                         'id'         => $candidate->id,
@@ -137,6 +165,7 @@ class DashboardController extends Controller
                     'max_winners' => $position->max_winners,
                     'total_votes' => $totalVotes,
                     'candidates'  => $candidates,
+                    'winners'     => $winners,
                 ];
             });
 
@@ -156,9 +185,13 @@ class DashboardController extends Controller
                 'session_id' => $sessionId,
                 'user_id'    => auth()->id(),
                 'error'      => $e->getMessage(),
+                'trace'      => $e->getTraceAsString()
             ]);
 
-            return response()->json(['success' => false, 'error' => 'Failed to load results.'], 500);
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to load results: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -171,18 +204,28 @@ class DashboardController extends Controller
         switch ($session->category) {
             case 'department':
                 return true;
-
             case 'course':
                 return $session->target_course === $user->department;
-
             case 'section':
                 return $session->target_section === $user->section;
-
             case 'manual':
-                return $session->manualVoters()
-                    ->where('user_id', $user->id)
-                    ->exists();
+                return $session->manualVoters()->where('user_id', $user->id)->exists();
+            default:
+                return false;
+        }
+    }
 
+    private function checkEligibilityForCompleted($session, $user)
+    {
+        switch ($session->category) {
+            case 'department':
+                return true;
+            case 'course':
+                return $session->target_course === $user->department;
+            case 'section':
+                return $session->target_section === $user->section;
+            case 'manual':
+                return $session->manualVoters()->where('user_id', $user->id)->exists();
             default:
                 return false;
         }
