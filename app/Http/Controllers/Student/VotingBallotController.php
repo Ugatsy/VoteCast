@@ -103,87 +103,103 @@ class VotingBallotController extends Controller
         }
     }
 
-    public function submit(Request $request, VotingSession $votingSession)
-    {
-        $user = auth()->user();
+public function submit(Request $request, VotingSession $votingSession)
+{
+    $user = auth()->user();
 
-        if (!$this->checkEligibility($votingSession, $user) || !$votingSession->isActive()) {
-            Log::warning('Vote submission blocked - eligibility failed', [
+    if (!$this->checkEligibility($votingSession, $user) || !$votingSession->isActive()) {
+        Log::warning('Vote submission blocked - eligibility failed', [
+            'session_id' => $votingSession->id,
+            'user_id'    => $user->id
+        ]);
+        abort(403, 'Voting not permitted.');
+    }
+
+    // ADD THIS CHECK: Prevent duplicate votes when vote changes are not allowed
+    if (!$votingSession->allow_vote_changes) {
+        $alreadyVoted = Vote::where('voter_id', $user->id)
+            ->where('voting_session_id', $votingSession->id)
+            ->exists();
+
+        if ($alreadyVoted) {
+            Log::warning('Duplicate vote attempt blocked', [
                 'session_id' => $votingSession->id,
                 'user_id'    => $user->id
             ]);
-            abort(403, 'Voting not permitted.');
+            return redirect()->route('student.dashboard')
+                ->with('error', 'You have already voted in this election and vote changes are not allowed.');
         }
-
-        // Validate release code if required
-        if ($votingSession->requires_release_code) {
-            $code = $votingSession->releaseCodes()
-                ->where('code', $request->release_code)
-                ->first();
-
-            if (!$code || !$code->isValid()) {
-                return back()->withErrors(['release_code' => 'Invalid or expired release code.']);
-            }
-        }
-
-        // Build validation rules — handle both single (radio) and multi (checkbox) winners
-        $positions = $votingSession->positions;
-
-        $validationRules = [];
-        foreach ($positions as $p) {
-            if ($p->max_winners > 1) {
-                $validationRules["votes.{$p->id}"]   = 'required|array|min:1|max:' . $p->max_winners;
-                $validationRules["votes.{$p->id}.*"] = 'exists:candidates,id';
-            } else {
-                $validationRules["votes.{$p->id}"] = 'required|exists:candidates,id';
-            }
-        }
-
-        $request->validate($validationRules);
-
-        $votes = $request->input('votes', []);
-
-        // Generate receipt ID
-        $receiptId = strtoupper(Str::random(8)) . '-' . time();
-
-        // Remove previous votes if vote changes are allowed
-        if ($votingSession->allow_vote_changes) {
-            Vote::where('voter_id', $user->id)
-                ->where('voting_session_id', $votingSession->id)
-                ->delete();
-        }
-
-        // Save votes — support both single and multiple candidates per position
-        foreach ($positions as $position) {
-            $candidateIds = is_array($votes[$position->id])
-                ? $votes[$position->id]
-                : [$votes[$position->id]];
-
-            foreach ($candidateIds as $i => $candidateId) {
-                Vote::create([
-                    'voting_session_id' => $votingSession->id,
-                    'position_id'       => $position->id,
-                    'candidate_id'      => $candidateId,
-                    'voter_id'          => $user->id,
-                    'receipt_id'        => $receiptId . '-P' . $position->id . '-C' . $i,
-                    'ip_address'        => $request->ip(),
-                    'user_agent'        => $request->userAgent(),
-                ]);
-            }
-        }
-
-        Log::info('Votes submitted successfully', [
-            'session_id'  => $votingSession->id,
-            'user_id'     => $user->id,
-            'receipt_id'  => $receiptId,
-            'votes_count' => count($votes)
-        ]);
-
-        return redirect()->route('student.confirmation', [
-            'session' => $votingSession->id,
-            'receipt' => $receiptId,
-        ]);
     }
+
+    // Validate release code if required
+    if ($votingSession->requires_release_code) {
+        $code = $votingSession->releaseCodes()
+            ->where('code', $request->release_code)
+            ->first();
+
+        if (!$code || !$code->isValid()) {
+            return back()->withErrors(['release_code' => 'Invalid or expired release code.']);
+        }
+    }
+
+    // Build validation rules — handle both single (radio) and multi (checkbox) winners
+    $positions = $votingSession->positions;
+
+    $validationRules = [];
+    foreach ($positions as $p) {
+        if ($p->max_winners > 1) {
+            $validationRules["votes.{$p->id}"]   = 'required|array|min:1|max:' . $p->max_winners;
+            $validationRules["votes.{$p->id}.*"] = 'exists:candidates,id';
+        } else {
+            $validationRules["votes.{$p->id}"] = 'required|exists:candidates,id';
+        }
+    }
+
+    $request->validate($validationRules);
+
+    $votes = $request->input('votes', []);
+
+    // Generate receipt ID
+    $receiptId = strtoupper(Str::random(8)) . '-' . time();
+
+    // Remove previous votes if vote changes are allowed
+    if ($votingSession->allow_vote_changes) {
+        Vote::where('voter_id', $user->id)
+            ->where('voting_session_id', $votingSession->id)
+            ->delete();
+    }
+
+    // Save votes — support both single and multiple candidates per position
+    foreach ($positions as $position) {
+        $candidateIds = is_array($votes[$position->id])
+            ? $votes[$position->id]
+            : [$votes[$position->id]];
+
+        foreach ($candidateIds as $i => $candidateId) {
+            Vote::create([
+                'voting_session_id' => $votingSession->id,
+                'position_id'       => $position->id,
+                'candidate_id'      => $candidateId,
+                'voter_id'          => $user->id,
+                'receipt_id'        => $receiptId . '-P' . $position->id . '-C' . $i,
+                'ip_address'        => $request->ip(),
+                'user_agent'        => $request->userAgent(),
+            ]);
+        }
+    }
+
+    Log::info('Votes submitted successfully', [
+        'session_id'  => $votingSession->id,
+        'user_id'     => $user->id,
+        'receipt_id'  => $receiptId,
+        'votes_count' => count($votes)
+    ]);
+
+    return redirect()->route('student.confirmation', [
+        'session' => $votingSession->id,
+        'receipt' => $receiptId,
+    ]);
+}
 
     public function confirmation(Request $request)
     {
