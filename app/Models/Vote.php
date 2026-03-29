@@ -5,7 +5,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class Vote extends Model
 {
-    public $timestamps = false;
+    // Enable timestamps since the table has created_at
+    // Note: The table only has created_at, not updated_at
+    // So we need to disable updated_at
+
+    public $timestamps = true;
+    const UPDATED_AT = null; // Disable updated_at since it doesn't exist
 
     protected $fillable = [
         'voting_session_id', 'position_id', 'candidate_id',
@@ -61,6 +66,14 @@ class Vote extends Model
     }
 
     /**
+     * Scope to get votes for a specific voter
+     */
+    public function scopeForVoter($query, $voterId)
+    {
+        return $query->where('voter_id', $voterId);
+    }
+
+    /**
      * Get vote count for a specific candidate
      */
     public static function getCandidateVoteCount($candidateId): int
@@ -77,5 +90,41 @@ class Vote extends Model
             ->where('voting_session_id', $sessionId)
             ->get()
             ->groupBy('position_id');
+    }
+
+    /**
+     * Check if a voter has already voted in a session
+     */
+    public static function hasVoted($sessionId, $voterId): bool
+    {
+        return self::where('voting_session_id', $sessionId)
+            ->where('voter_id', $voterId)
+            ->exists();
+    }
+
+    /**
+     * Get voter's votes for a specific session
+     */
+    public static function getVoterVotes($sessionId, $voterId)
+    {
+        return self::with(['candidate', 'position'])
+            ->where('voting_session_id', $sessionId)
+            ->where('voter_id', $voterId)
+            ->get();
+    }
+
+    /**
+     * Get receipt data for a vote
+     */
+    public function getReceiptDataAttribute(): array
+    {
+        return [
+            'receipt_id' => $this->receipt_id,
+            'voter_name' => $this->voter->full_name ?? 'Unknown',
+            'candidate_name' => $this->candidate->full_name ?? 'Unknown',
+            'position_title' => $this->position->title ?? 'Unknown',
+            'voted_at' => $this->created_at,
+            'ip_address' => $this->ip_address,
+        ];
     }
 }
