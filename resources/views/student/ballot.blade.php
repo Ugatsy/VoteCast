@@ -91,7 +91,6 @@
             transform: translate(-50%, -50%);
         }
 
-        /* Square check for multi-winner */
         .check-square {
             width: 22px; height: 22px; border-radius: 4px;
             border: 2px solid #cbd5e1; margin-left: auto; flex-shrink: 0;
@@ -128,6 +127,10 @@
         }
         .btn-submit:hover:not(:disabled) { background: #1447c0; transform: translateY(-1px); }
         .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .alert {
+            border-radius: 12px;
+        }
     </style>
 </head>
 <body>
@@ -158,6 +161,13 @@
     @if($errors->any())
     <div class="alert alert-danger alert-dismissible fade show">
         <i class="bi bi-exclamation-circle me-1"></i>{{ $errors->first() }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    @endif
+
+    @if(session('error'))
+    <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bi bi-exclamation-circle me-1"></i>{{ session('error') }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     @endif
@@ -206,7 +216,7 @@
             @endif
 
             @foreach($position->candidates as $candidate)
-            <label class="candidate-label" id="label-{{ $position->id }}-{{ $candidate->id }}">
+            <label class="candidate-label" id="label-{{ $position->id }}-{{ $candidate->id }}" data-position-id="{{ $position->id }}" data-candidate-id="{{ $candidate->id }}">
                 @if($position->max_winners > 1)
                     <input type="checkbox"
                            name="votes[{{ $position->id }}][]"
@@ -265,75 +275,166 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const totalPositions = {{ $votingSession->positions->count() }};
-    const selected = {};
+    document.addEventListener('DOMContentLoaded', function() {
+        const totalPositions = {{ $votingSession->positions->count() }};
+        let selected = {};
 
-    // Handle RADIO buttons (single winner)
-    document.querySelectorAll('input[type="radio"]').forEach(radio => {
-        radio.addEventListener('change', function () {
-            const posId  = this.dataset.position;
-            const candId = this.value;
-
-            document.querySelectorAll(`label[id^="label-${posId}-"]`).forEach(l => l.classList.remove('selected'));
-            document.getElementById(`label-${posId}-${candId}`).classList.add('selected');
-
-            selected[posId] = [candId];
-            updateProgress(posId);
-        });
-    });
-
-    // Handle CHECKBOX buttons (multiple winners)
-    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', function () {
-            const posId = this.dataset.position;
-            const max   = parseInt(this.dataset.max);
-            const label = document.getElementById(`label-${posId}-${this.value}`);
-            const allCheckboxes = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]`);
-            const checked = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]:checked`);
-
-            if (this.checked && checked.length > max) {
-                this.checked = false;
-                return;
+        // Helper function to update progress
+        function updateProgress(posId) {
+            const statusEl = document.getElementById(`posStatus${posId}`);
+            if (selected[posId] && selected[posId].length > 0) {
+                statusEl.textContent = `✓ ${selected[posId].length} selected`;
+                statusEl.classList.add('done');
+            } else {
+                statusEl.textContent = 'Not selected';
+                statusEl.classList.remove('done');
             }
 
-            label.classList.toggle('selected', this.checked);
-
-            const rechecked = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]:checked`);
-
-            // Disable unchosen ones if max reached
-            allCheckboxes.forEach(cb => {
-                const cbLabel = document.getElementById(`label-${posId}-${cb.value}`);
-                if (!cb.checked) {
-                    cb.disabled = rechecked.length >= max;
-                    cbLabel.classList.toggle('disabled-choice', rechecked.length >= max);
-                } else {
-                    cb.disabled = false;
-                    cbLabel.classList.remove('disabled-choice');
-                }
-            });
-
-            selected[posId] = Array.from(rechecked).map(c => c.value);
-            if (selected[posId].length === 0) delete selected[posId];
-
-            updateProgress(posId);
-        });
-    });
-
-    function updateProgress(posId) {
-        const statusEl = document.getElementById(`posStatus${posId}`);
-        if (selected[posId] && selected[posId].length > 0) {
-            statusEl.textContent = `✓ ${selected[posId].length} selected`;
-            statusEl.classList.add('done');
-        } else {
-            statusEl.textContent = 'Not selected';
-            statusEl.classList.remove('done');
+            const count = Object.keys(selected).length;
+            document.getElementById('progressText').textContent = count;
+            document.getElementById('progressFill').style.width = ((count / totalPositions) * 100) + '%';
+            document.getElementById('submitBtn').disabled = count < totalPositions;
         }
 
-        const count = Object.keys(selected).length;
-        document.getElementById('progressText').textContent = count;
-        document.getElementById('progressFill').style.width = ((count / totalPositions) * 100) + '%';
-        document.getElementById('submitBtn').disabled = count < totalPositions;
-    }
+        // Handle RADIO buttons (single winner)
+        document.querySelectorAll('input[type="radio"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const posId = this.dataset.position;
+                const candId = this.value;
+
+                // Remove selected class from all labels in this position
+                document.querySelectorAll(`label[data-position-id="${posId}"]`).forEach(label => {
+                    label.classList.remove('selected');
+                });
+
+                // Add selected class to the chosen candidate's label
+                const selectedLabel = document.getElementById(`label-${posId}-${candId}`);
+                if (selectedLabel) {
+                    selectedLabel.classList.add('selected');
+                }
+
+                // Update selected object
+                selected[posId] = [candId];
+                updateProgress(posId);
+            });
+        });
+
+        // Handle CHECKBOX buttons (multiple winners)
+        document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const posId = this.dataset.position;
+                const max = parseInt(this.dataset.max);
+                const candidateId = this.value;
+                const label = document.getElementById(`label-${posId}-${candidateId}`);
+                const allCheckboxes = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]`);
+                const checked = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]:checked`);
+
+                // Check if trying to select more than max
+                if (this.checked && checked.length > max) {
+                    this.checked = false;
+                    alert(`You can only select up to ${max} candidates for this position.`);
+                    return;
+                }
+
+                // Toggle selected class on label
+                if (this.checked) {
+                    label.classList.add('selected');
+                } else {
+                    label.classList.remove('selected');
+                }
+
+                const rechecked = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]:checked`);
+
+                // Enable/disable other checkboxes based on max limit
+                allCheckboxes.forEach(cb => {
+                    const cbLabel = document.getElementById(`label-${posId}-${cb.value}`);
+                    if (!cb.checked) {
+                        if (rechecked.length >= max) {
+                            cb.disabled = true;
+                            cbLabel.classList.add('disabled-choice');
+                        } else {
+                            cb.disabled = false;
+                            cbLabel.classList.remove('disabled-choice');
+                        }
+                    } else {
+                        cb.disabled = false;
+                        cbLabel.classList.remove('disabled-choice');
+                    }
+                });
+
+                // Update selected object
+                if (rechecked.length > 0) {
+                    selected[posId] = Array.from(rechecked).map(cb => cb.value);
+                } else {
+                    delete selected[posId];
+                }
+
+                updateProgress(posId);
+            });
+        });
+
+        // Initialize progress on page load (check for pre-selected values)
+        function initializeProgress() {
+            // Check radio buttons
+            document.querySelectorAll('input[type="radio"]:checked').forEach(radio => {
+                const posId = radio.dataset.position;
+                const candId = radio.value;
+                selected[posId] = [candId];
+
+                const label = document.getElementById(`label-${posId}-${candId}`);
+                if (label) label.classList.add('selected');
+
+                updateProgress(posId);
+            });
+
+            // Check checkboxes
+            document.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
+                const posId = checkbox.dataset.position;
+                const candId = checkbox.value;
+
+                if (!selected[posId]) selected[posId] = [];
+                if (!selected[posId].includes(candId)) {
+                    selected[posId].push(candId);
+                }
+
+                const label = document.getElementById(`label-${posId}-${candId}`);
+                if (label) label.classList.add('selected');
+
+                updateProgress(posId);
+            });
+        }
+
+        initializeProgress();
+
+        // Form submission validation
+        document.getElementById('ballotForm').addEventListener('submit', function(e) {
+            const submitBtn = document.getElementById('submitBtn');
+            if (submitBtn.disabled) {
+                e.preventDefault();
+                alert('Please select candidates for all positions before submitting.');
+                return false;
+            }
+
+            // Double-check all positions have selections
+            const positionIds = Array.from(document.querySelectorAll('.position-card')).map(card => {
+                const header = card.querySelector('.position-header');
+                const idMatch = card.id.match(/posCard(\d+)/);
+                return idMatch ? idMatch[1] : null;
+            }).filter(id => id);
+
+            const missingPositions = positionIds.filter(posId => !selected[posId]);
+
+            if (missingPositions.length > 0) {
+                e.preventDefault();
+                alert('Please select candidates for all positions before submitting.');
+                return false;
+            }
+
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Submitting...';
+        });
+    });
 </script>
 </body>
 </html>
