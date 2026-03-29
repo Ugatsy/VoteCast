@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             $table->text('manifesto')->nullable()->after('photo');
-            $table->string('platform')->nullable()->after('manifesto');
+            $table->text('platform')->nullable()->after('manifesto');
             $table->string('photo_public_id')->nullable()->after('photo');
             $table->boolean('is_candidate')->default(false)->after('is_active');
             $table->timestamp('candidate_applied_at')->nullable()->after('is_candidate');

@@ -90,7 +90,7 @@ class ProfileController extends Controller
     public function updateManifesto(Request $request)
     {
         $validated = $request->validate([
-            'manifesto' => 'nullable|string|max:5000',
+            'manifesto' => 'nullable|string|max:255',
             'platform' => 'nullable|string|max:10000',
         ]);
 

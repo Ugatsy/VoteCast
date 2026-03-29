@@ -203,10 +203,10 @@
                 <div class="text-start">
                     <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>Profile Information</h6>
 
-                    <div class="info-row">
+                    {{-- <div class="info-row">
                         <div class="info-label">Email Address</div>
                         <div class="info-value">{{ $user->email }}</div>
-                    </div>
+                    </div> --}}
 
                     <div class="info-row">
                         <div class="info-label">Department / Course</div>

@@ -119,7 +119,8 @@
             <div class="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 @foreach($position->candidates as $candidate)
                 @php
-                    $manifestoText = $candidate->full_manifesto;
+                    $motto = $candidate->student->manifesto ?? null;
+                    $platform = $candidate->student->platform ?? null;
                     $photoUrl = $candidate->photo_url;
                 @endphp
 
@@ -176,18 +177,30 @@
                             @endif
                         </div>
 
-                        {{-- Manifesto / Platform --}}
-                        @if($manifestoText)
+                        {{-- Motto --}}
+                        @if($motto)
+                        <div class="bg-[#eff6ff] rounded-xl px-3 py-2 mb-2 flex items-start gap-1.5">
+                            <i class="bi bi-quote text-[#1a56db] opacity-50 text-base mt-0.5 flex-shrink-0"></i>
+                            <span class="text-[#1e293b] text-xs italic font-semibold leading-snug">{{ $motto }}</span>
+                        </div>
+                        @endif
+
+                        {{-- Platform --}}
+                        @if($platform)
                         <div class="bg-gradient-to-r from-cyan-400 to-teal-400 rounded-xl p-3">
                             <div class="text-[0.65rem] font-bold uppercase tracking-wider text-white/80 mb-1.5 flex items-center gap-1">
-                                <i class="bi bi-megaphone"></i> PLATFORM
+                                <i class="bi bi-list-check"></i> PLATFORM
                             </div>
-                            <div class="text-white text-xs leading-relaxed line-clamp-4">{{ Str::limit($manifestoText, 150) }}</div>
+                            <ul class="mb-0 pl-3" style="list-style:disc;color:white">
+                                @foreach(array_slice(array_filter(explode("\n", $platform)), 0, 4) as $point)
+                                    <li class="text-white text-xs leading-relaxed">{{ trim($point) }}</li>
+                                @endforeach
+                            </ul>
                         </div>
-                        @else
+                        @elseif(!$motto)
                         <div class="bg-slate-50 rounded-xl p-3 text-center">
                             <i class="bi bi-chat-dots text-slate-300 text-lg"></i>
-                            <p class="text-slate-400 text-[0.7rem] italic mt-1 mb-0">No manifesto provided yet.</p>
+                            <p class="text-slate-400 text-[0.7rem] italic mt-1 mb-0">No platform provided yet.</p>
                         </div>
                         @endif
                     </div>
