@@ -114,147 +114,142 @@ class VotingBallotController extends Controller
         }
     }
 
-    public function submit(Request $request, VotingSession $votingSession)
-    {
-        $user = auth()->user();
+public function submit(Request $request, VotingSession $votingSession)
+{
+    $user = auth()->user();
 
-        DB::beginTransaction();
+    DB::beginTransaction();
 
-        try {
-            if (!$votingSession->isActive()) {
-                throw new \Exception('This election is no longer active.');
+    try {
+        if (!$votingSession->isActive()) {
+            throw new \Exception('This election is no longer active.');
+        }
+
+        if (!$votingSession->isEligible($user)) {
+            throw new \Exception('You are not eligible to vote in this election.');
+        }
+
+        // Check for existing votes with row lock
+        $existingVotes = Vote::where('voter_id', $user->id)
+            ->where('voting_session_id', $votingSession->id)
+            ->lockForUpdate()
+            ->get();
+
+        $hasExistingVotes = $existingVotes->isNotEmpty();
+
+        if (!$votingSession->allow_vote_changes && $hasExistingVotes) {
+            throw new \Exception('You have already voted in this election and vote changes are not allowed.');
+        }
+
+        // Validate release code if required
+        if ($votingSession->requires_release_code) {
+            $code = $votingSession->releaseCodes()
+                ->where('code', $request->release_code)
+                ->active()
+                ->first();
+
+            if (!$code) {
+                throw new \Exception('Invalid or expired release code.');
             }
+        }
 
-            if (!$votingSession->isEligible($user)) {
-                throw new \Exception('You are not eligible to vote in this election.');
-            }
+        // Get positions
+        $positions = $votingSession->positions;
 
-            // Check for existing votes with row lock
-            $existingVotes = Vote::where('voter_id', $user->id)
-                ->where('voting_session_id', $votingSession->id)
-                ->lockForUpdate()
-                ->get();
+        if ($positions->isEmpty()) {
+            throw new \Exception('This election has no positions configured.');
+        }
 
-            $hasExistingVotes = $existingVotes->isNotEmpty();
+        // Get submitted votes
+        $submittedVotes = $request->input('votes', []);
 
-            if (!$votingSession->allow_vote_changes && $hasExistingVotes) {
-                throw new \Exception('You have already voted in this election and vote changes are not allowed.');
-            }
-
-            // Validate release code if required
-            if ($votingSession->requires_release_code) {
-                $code = $votingSession->releaseCodes()
-                    ->where('code', $request->release_code)
-                    ->active()
-                    ->first();
-
-                if (!$code) {
-                    throw new \Exception('Invalid or expired release code.');
-                }
-            }
-
-            // Get positions
-            $positions = $votingSession->positions;
-
-            if ($positions->isEmpty()) {
-                throw new \Exception('This election has no positions configured.');
-            }
-
-            // Build validation rules
-            $validationRules = [];
-            foreach ($positions as $position) {
-                if ($position->max_winners > 1) {
-                    $validationRules["votes.{$position->id}"] = 'required|array|min:1|max:' . $position->max_winners;
-                    $validationRules["votes.{$position->id}.*"] = 'exists:candidates,id';
-                } else {
-                    $validationRules["votes.{$position->id}"] = 'required|exists:candidates,id';
-                }
-            }
-
-            $validator = validator($request->all(), $validationRules);
-            if ($validator->fails()) {
-                throw new \Exception($validator->errors()->first());
-            }
-
-            $submittedVotes = $request->input('votes', []);
-
-            // Verify all positions have votes
-            $submittedPositionIds = array_keys($submittedVotes);
-            $missingPositions = $positions->pluck('id')->diff($submittedPositionIds);
-
-            if ($missingPositions->isNotEmpty()) {
-                throw new \Exception('Please vote for all positions before submitting.');
-            }
-
-            $receiptId = strtoupper(Str::random(8)) . '-' . time();
-
-            // Remove existing votes if changes allowed
-            if ($votingSession->allow_vote_changes && $hasExistingVotes) {
-                Vote::where('voter_id', $user->id)
-                    ->where('voting_session_id', $votingSession->id)
-                    ->delete();
-            }
-
-            // Save new votes
-            $votesSaved = 0;
-
-            foreach ($positions as $position) {
+        // Validate each position's votes (if any)
+        foreach ($positions as $position) {
+            if (isset($submittedVotes[$position->id])) {
                 $candidateIds = is_array($submittedVotes[$position->id])
                     ? $submittedVotes[$position->id]
                     : [$submittedVotes[$position->id]];
 
-                foreach ($candidateIds as $index => $candidateId) {
+                // Check max winners constraint
+                if (count($candidateIds) > $position->max_winners) {
+                    throw new \Exception("You cannot select more than {$position->max_winners} candidates for {$position->title}");
+                }
+
+                // Validate each candidate exists and belongs to this position
+                foreach ($candidateIds as $candidateId) {
                     $candidate = $position->candidates()->find($candidateId);
                     if (!$candidate) {
                         throw new \Exception("Invalid candidate selected for position: {$position->title}");
                     }
-
-                    Vote::create([
-                        'voting_session_id' => $votingSession->id,
-                        'position_id' => $position->id,
-                        'candidate_id' => $candidateId,
-                        'voter_id' => $user->id,
-                        'receipt_id' => $receiptId . '-P' . $position->id . '-C' . $index,
-                        'ip_address' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-                    $votesSaved++;
                 }
             }
+        }
 
-            if ($votesSaved === 0) {
-                throw new \Exception('No votes were saved. Please try again.');
+        $receiptId = strtoupper(Str::random(8)) . '-' . time();
+
+        // Remove existing votes if changes allowed
+        if ($votingSession->allow_vote_changes && $hasExistingVotes) {
+            Vote::where('voter_id', $user->id)
+                ->where('voting_session_id', $votingSession->id)
+                ->delete();
+        }
+
+        // Save new votes (only for positions with selections)
+        $votesSaved = 0;
+
+        foreach ($positions as $position) {
+            // Skip if no votes for this position (abstain)
+            if (!isset($submittedVotes[$position->id])) {
+                continue;
             }
 
-            DB::commit();
+            $candidateIds = is_array($submittedVotes[$position->id])
+                ? $submittedVotes[$position->id]
+                : [$submittedVotes[$position->id]];
 
-            Log::info('Votes submitted successfully', [
-                'session_id' => $votingSession->id,
-                'user_id' => $user->id,
-                'receipt_id' => $receiptId,
-                'votes_saved' => $votesSaved
-            ]);
-
-            return redirect()->route('student.confirmation', [
-                'session' => $votingSession->id,
-                'receipt' => $receiptId,
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('Vote submission failed', [
-                'session_id' => $votingSession->id,
-                'user_id' => $user->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return back()
-                ->withInput()
-                ->with('error', $e->getMessage());
+            foreach ($candidateIds as $index => $candidateId) {
+                Vote::create([
+                    'voting_session_id' => $votingSession->id,
+                    'position_id' => $position->id,
+                    'candidate_id' => $candidateId,
+                    'voter_id' => $user->id,
+                    'receipt_id' => $receiptId . '-P' . $position->id . '-C' . $index,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+                $votesSaved++;
+            }
         }
+
+        DB::commit();
+
+        Log::info('Votes submitted successfully', [
+            'session_id' => $votingSession->id,
+            'user_id' => $user->id,
+            'receipt_id' => $receiptId,
+            'votes_saved' => $votesSaved
+        ]);
+
+        return redirect()->route('student.confirmation', [
+            'session' => $votingSession->id,
+            'receipt' => $receiptId,
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+
+        Log::error('Vote submission failed', [
+            'session_id' => $votingSession->id,
+            'user_id' => $user->id,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return back()
+            ->withInput()
+            ->with('error', $e->getMessage());
     }
+}
 
     public function confirmation(Request $request)
     {

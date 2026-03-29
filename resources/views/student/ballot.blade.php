@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>VoteCast — Ballot</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -30,7 +31,16 @@
         .position-card {
             background: #fff; border-radius: 14px;
             border: 1px solid #e2e8f0; margin-bottom: 1.5rem; overflow: hidden;
+            transition: all 0.3s;
         }
+        .position-card.skipped {
+            opacity: 0.7;
+            background: #f8fafc;
+        }
+        .position-card.skipped .position-header {
+            background: #f1f5f9;
+        }
+
         .position-header {
             background: #f8fafc; padding: 0.9rem 1.25rem;
             border-bottom: 1px solid #e2e8f0;
@@ -46,7 +56,8 @@
         .position-status {
             margin-left: auto; font-size: 0.75rem; font-weight: 500; color: #94a3b8;
         }
-        .position-status.done { color: #22c55e; }
+        .position-status.voted { color: #22c55e; }
+        .position-status.skipped { color: #f59e0b; }
 
         .candidate-label {
             display: flex; align-items: center; gap: 1rem;
@@ -57,16 +68,15 @@
         }
         .candidate-label:last-child { border-bottom: none; }
         .candidate-label:hover { background: #f8fafc; }
-        .candidate-label input[type="radio"],
         .candidate-label input[type="checkbox"] { display: none; }
         .candidate-label.selected {
             background: #eff6ff;
             border-left: 4px solid #1a56db;
         }
-        .candidate-label.selected .check-circle {
+        .candidate-label.selected .check-square {
             background: #1a56db; border-color: #1a56db;
         }
-        .candidate-label.selected .check-circle::after { display: block; }
+        .candidate-label.selected .check-square::after { display: block; }
         .candidate-label.disabled-choice {
             opacity: 0.45; cursor: not-allowed;
         }
@@ -78,26 +88,10 @@
         }
         .candidate-label.selected .candidate-avatar { border-color: #1a56db; }
 
-        .check-circle {
-            width: 22px; height: 22px; border-radius: 50%;
-            border: 2px solid #cbd5e1; margin-left: auto; flex-shrink: 0;
-            position: relative;
-        }
-        .check-circle::after {
-            content: ''; display: none;
-            width: 10px; height: 10px; border-radius: 50%;
-            background: #fff;
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-        }
-
         .check-square {
             width: 22px; height: 22px; border-radius: 4px;
             border: 2px solid #cbd5e1; margin-left: auto; flex-shrink: 0;
             position: relative;
-        }
-        .candidate-label.selected .check-square {
-            background: #1a56db; border-color: #1a56db;
         }
         .check-square::after {
             content: '✓'; display: none;
@@ -105,13 +99,48 @@
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
         }
-        .candidate-label.selected .check-square::after { display: block; }
 
         .multi-hint {
             background: #fffbeb; border: 1px solid #fcd34d;
             border-radius: 8px; padding: 0.5rem 1rem;
             font-size: 0.78rem; color: #92400e;
             margin: 0.5rem 1.25rem;
+        }
+
+        .skip-option {
+            background: #fef9e3;
+            border-top: 1px solid #fde68a;
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .skip-option:hover {
+            background: #fef3c7;
+        }
+        .skip-option.selected {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+        }
+        .skip-checkbox {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 2px solid #f59e0b;
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .skip-option.selected .skip-checkbox {
+            background: #f59e0b;
+        }
+        .skip-option.selected .skip-checkbox::after {
+            content: '✓';
+            color: #fff;
+            font-size: 12px;
         }
 
         .release-card {
@@ -128,19 +157,68 @@
         .btn-submit:hover:not(:disabled) { background: #1447c0; transform: translateY(-1px); }
         .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
+        .btn-abstain-all {
+            background: #f59e0b; color: #fff; border: none;
+            border-radius: 8px; padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-abstain-all:hover {
+            background: #d97706;
+            transform: translateY(-1px);
+        }
+
         .alert {
             border-radius: 12px;
+        }
+
+        .summary-bar {
+            background: white;
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid #e2e8f0;
+        }
+
+        .summary-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-right: 1rem;
+            font-size: 0.85rem;
+        }
+
+        .summary-badge {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .summary-badge.voted {
+            background: #22c55e20;
+            color: #15803d;
+        }
+
+        .summary-badge.skipped {
+            background: #f59e0b20;
+            color: #b45309;
         }
     </style>
 </head>
 <body>
 
 <div class="ballot-header">
-    <div class="container" style="max-width:700px">
+    <div class="container" style="max-width:800px">
         <div class="d-flex justify-content-between align-items-start">
             <div>
                 <h5>{{ $votingSession->title }}</h5>
-                <small>{{ $votingSession->positions->count() }} position(s)</small>
+                <small>{{ $votingSession->positions->count() }} position(s) · You may skip positions you don't wish to vote for</small>
             </div>
             <a href="{{ route('student.dashboard') }}"
                style="color:rgba(255,255,255,0.7);font-size:0.85rem;text-decoration:none">
@@ -151,12 +229,12 @@
             <div class="progress-fill" id="progressFill" style="width:0%"></div>
         </div>
         <div style="font-size:0.75rem;opacity:0.6;margin-top:3px">
-            <span id="progressText">0</span> of {{ $votingSession->positions->count() }} positions selected
+            <span id="progressText">0</span> of {{ $votingSession->positions->count() }} positions reviewed
         </div>
     </div>
 </div>
 
-<div class="container py-4" style="max-width:700px">
+<div class="container py-4" style="max-width:800px">
 
     @if($errors->any())
     <div class="alert alert-danger alert-dismissible fade show">
@@ -178,6 +256,25 @@
     </div>
     @endif
 
+    {{-- Summary Bar --}}
+    <div class="summary-bar">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <span class="summary-item">
+                    <span class="summary-badge voted" id="votedCountBadge">0</span>
+                    <span>Positions voted</span>
+                </span>
+                <span class="summary-item">
+                    <span class="summary-badge skipped" id="skippedCountBadge">0</span>
+                    <span>Positions skipped</span>
+                </span>
+            </div>
+            <button type="button" class="btn-abstain-all" onclick="skipAllPositions()">
+                <i class="bi bi-eye-slash me-1"></i>Skip All Positions
+            </button>
+        </div>
+    </div>
+
     <form method="POST" action="{{ route('student.vote', $votingSession) }}" id="ballotForm">
         @csrf
 
@@ -198,7 +295,7 @@
 
         {{-- Positions --}}
         @foreach($votingSession->positions as $index => $position)
-        <div class="position-card" id="posCard{{ $position->id }}">
+        <div class="position-card" id="posCard{{ $position->id }}" data-position-id="{{ $position->id }}">
             <div class="position-header">
                 <div class="position-number">{{ $index + 1 }}</div>
                 {{ $position->title }}
@@ -211,25 +308,18 @@
             @if($position->max_winners > 1)
             <div class="multi-hint">
                 <i class="bi bi-info-circle me-1"></i>
-                You may select <strong>up to {{ $position->max_winners }} candidates</strong> for this position.
+                You may select <strong>up to {{ $position->max_winners }} candidates</strong>. Leave all unchecked to skip this position.
             </div>
             @endif
 
             @foreach($position->candidates as $candidate)
             <label class="candidate-label" id="label-{{ $position->id }}-{{ $candidate->id }}" data-position-id="{{ $position->id }}" data-candidate-id="{{ $candidate->id }}">
-                @if($position->max_winners > 1)
-                    <input type="checkbox"
-                           name="votes[{{ $position->id }}][]"
-                           value="{{ $candidate->id }}"
-                           data-position="{{ $position->id }}"
-                           data-max="{{ $position->max_winners }}">
-                @else
-                    <input type="radio"
-                           name="votes[{{ $position->id }}]"
-                           value="{{ $candidate->id }}"
-                           data-position="{{ $position->id }}"
-                           required>
-                @endif
+                <input type="checkbox"
+                       name="votes[{{ $position->id }}][]"
+                       value="{{ $candidate->id }}"
+                       data-position="{{ $position->id }}"
+                       data-max="{{ $position->max_winners }}"
+                       class="candidate-checkbox">
 
                 <img src="{{ $candidate->photo_url }}"
                      class="candidate-avatar" alt="{{ $candidate->student->full_name }}">
@@ -245,16 +335,21 @@
                     @endif
                 </div>
 
-                @if($position->max_winners > 1)
-                    <div class="check-square"></div>
-                @else
-                    <div class="check-circle"></div>
-                @endif
+                <div class="check-square"></div>
             </label>
             @endforeach
 
+            {{-- Skip option for this position --}}
+            <div class="skip-option" id="skipOption{{ $position->id }}" onclick="toggleSkipPosition({{ $position->id }})">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-eye-slash text-warning"></i>
+                    <span style="font-size:0.85rem;">Abstain from voting for this position</span>
+                </div>
+                <div class="skip-checkbox" id="skipCheckbox{{ $position->id }}"></div>
+            </div>
+
             @if($position->candidates->count() === 0)
-            <div class="p-3 text-muted small text-center">No candidates for this position.</div>
+            <div class="p-3 text-muted small text-center">No candidates for this position. You may skip this position.</div>
             @endif
         </div>
         @endforeach
@@ -262,13 +357,14 @@
         {{-- Submit --}}
         <div class="d-flex gap-3 mt-4">
             <a href="{{ route('student.dashboard') }}" class="btn btn-outline-secondary px-4">Cancel</a>
-            <button type="submit" class="btn-submit" id="submitBtn" disabled>
+            <button type="submit" class="btn-submit" id="submitBtn">
                 Submit My Votes →
             </button>
         </div>
 
         <p class="text-center text-muted small mt-3">
             <i class="bi bi-lock me-1"></i>Your vote is anonymous and securely recorded.
+            <br>You may abstain from any position by checking the skip option.
         </p>
     </form>
 </div>
@@ -277,57 +373,62 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const totalPositions = {{ $votingSession->positions->count() }};
-        let selected = {};
+        let selections = {};
+        let skippedPositions = {};
 
-        // Helper function to update progress
-        function updateProgress(posId) {
-            const statusEl = document.getElementById(`posStatus${posId}`);
-            if (selected[posId] && selected[posId].length > 0) {
-                statusEl.textContent = `✓ ${selected[posId].length} selected`;
-                statusEl.classList.add('done');
-            } else {
-                statusEl.textContent = 'Not selected';
-                statusEl.classList.remove('done');
+        // Helper function to update all UI elements
+        function updateProgress() {
+            const votedCount = Object.keys(selections).filter(posId => selections[posId] && selections[posId].length > 0).length;
+            const skippedCount = Object.keys(skippedPositions).filter(posId => skippedPositions[posId] === true).length;
+            const reviewedCount = votedCount + skippedCount;
+
+            // Update progress bar
+            document.getElementById('progressText').textContent = reviewedCount;
+            document.getElementById('progressFill').style.width = ((reviewedCount / totalPositions) * 100) + '%';
+
+            // Update summary badges
+            document.getElementById('votedCountBadge').textContent = votedCount;
+            document.getElementById('skippedCountBadge').textContent = skippedCount;
+
+            // Enable submit button if all positions are either voted or skipped
+            document.getElementById('submitBtn').disabled = reviewedCount < totalPositions;
+
+            // Update each position's status
+            for (let posId = 1; posId <= totalPositions; posId++) {
+                updatePositionStatus(posId);
             }
-
-            const count = Object.keys(selected).length;
-            document.getElementById('progressText').textContent = count;
-            document.getElementById('progressFill').style.width = ((count / totalPositions) * 100) + '%';
-            document.getElementById('submitBtn').disabled = count < totalPositions;
         }
 
-        // Handle RADIO buttons (single winner)
-        document.querySelectorAll('input[type="radio"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                const posId = this.dataset.position;
-                const candId = this.value;
+        function updatePositionStatus(posId) {
+            const statusEl = document.getElementById(`posStatus${posId}`);
+            const card = document.getElementById(`posCard${posId}`);
 
-                // Remove selected class from all labels in this position
-                document.querySelectorAll(`label[data-position-id="${posId}"]`).forEach(label => {
-                    label.classList.remove('selected');
-                });
+            if (selections[posId] && selections[posId].length > 0) {
+                statusEl.textContent = `✓ ${selections[posId].length} selected`;
+                statusEl.classList.add('voted');
+                statusEl.classList.remove('skipped');
+                card.classList.remove('skipped');
+            } else if (skippedPositions[posId]) {
+                statusEl.textContent = '⨯ Skipped';
+                statusEl.classList.add('skipped');
+                statusEl.classList.remove('voted');
+                card.classList.add('skipped');
+            } else {
+                statusEl.textContent = 'Not selected';
+                statusEl.classList.remove('voted', 'skipped');
+                card.classList.remove('skipped');
+            }
+        }
 
-                // Add selected class to the chosen candidate's label
-                const selectedLabel = document.getElementById(`label-${posId}-${candId}`);
-                if (selectedLabel) {
-                    selectedLabel.classList.add('selected');
-                }
-
-                // Update selected object
-                selected[posId] = [candId];
-                updateProgress(posId);
-            });
-        });
-
-        // Handle CHECKBOX buttons (multiple winners)
-        document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        // Handle checkbox changes for candidates
+        document.querySelectorAll('.candidate-checkbox').forEach(checkbox => {
             checkbox.addEventListener('change', function() {
                 const posId = this.dataset.position;
                 const max = parseInt(this.dataset.max);
                 const candidateId = this.value;
                 const label = document.getElementById(`label-${posId}-${candidateId}`);
-                const allCheckboxes = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]`);
-                const checked = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]:checked`);
+                const allCheckboxes = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]`);
+                const checked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
 
                 // Check if trying to select more than max
                 if (this.checked && checked.length > max) {
@@ -343,7 +444,7 @@
                     label.classList.remove('selected');
                 }
 
-                const rechecked = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]:checked`);
+                const rechecked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
 
                 // Enable/disable other checkboxes based on max limit
                 allCheckboxes.forEach(cb => {
@@ -362,71 +463,124 @@
                     }
                 });
 
-                // Update selected object
+                // Update selections
                 if (rechecked.length > 0) {
-                    selected[posId] = Array.from(rechecked).map(cb => cb.value);
+                    selections[posId] = Array.from(rechecked).map(cb => cb.value);
                 } else {
-                    delete selected[posId];
+                    delete selections[posId];
                 }
 
-                updateProgress(posId);
+                // If we have any votes for this position, remove skip status
+                if (selections[posId] && selections[posId].length > 0) {
+                    skippedPositions[posId] = false;
+                    const skipCheckbox = document.getElementById(`skipCheckbox${posId}`);
+                    if (skipCheckbox) skipCheckbox.classList.remove('selected');
+                }
+
+                updateProgress();
             });
         });
 
-        // Initialize progress on page load (check for pre-selected values)
-        function initializeProgress() {
-            // Check radio buttons
-            document.querySelectorAll('input[type="radio"]:checked').forEach(radio => {
-                const posId = radio.dataset.position;
-                const candId = radio.value;
-                selected[posId] = [candId];
+        // Toggle skip position
+        window.toggleSkipPosition = function(posId) {
+            const skipOption = document.getElementById(`skipOption${posId}`);
+            const skipCheckbox = document.getElementById(`skipCheckbox${posId}`);
+            const positionCard = document.getElementById(`posCard${posId}`);
 
-                const label = document.getElementById(`label-${posId}-${candId}`);
-                if (label) label.classList.add('selected');
-
-                updateProgress(posId);
-            });
-
-            // Check checkboxes
-            document.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
-                const posId = checkbox.dataset.position;
-                const candId = checkbox.value;
-
-                if (!selected[posId]) selected[posId] = [];
-                if (!selected[posId].includes(candId)) {
-                    selected[posId].push(candId);
+            // If we have any votes for this position, clear them first
+            if (selections[posId] && selections[posId].length > 0) {
+                if (!confirm('You have selected candidates for this position. Skipping will clear your selections. Continue?')) {
+                    return;
                 }
 
-                const label = document.getElementById(`label-${posId}-${candId}`);
-                if (label) label.classList.add('selected');
+                // Clear all checkboxes for this position
+                const checkboxes = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]`);
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                    const label = document.getElementById(`label-${posId}-${cb.value}`);
+                    if (label) label.classList.remove('selected');
+                    cb.disabled = false;
+                });
+                delete selections[posId];
+            }
 
-                updateProgress(posId);
+            // Toggle skip status
+            if (skippedPositions[posId]) {
+                // Un-skip
+                skippedPositions[posId] = false;
+                skipOption.classList.remove('selected');
+                skipCheckbox.classList.remove('selected');
+                positionCard.classList.remove('skipped');
+            } else {
+                // Skip
+                skippedPositions[posId] = true;
+                skipOption.classList.add('selected');
+                skipCheckbox.classList.add('selected');
+                positionCard.classList.add('skipped');
+            }
+
+            updateProgress();
+        };
+
+        // Skip all positions
+        window.skipAllPositions = function() {
+            if (confirm('Skip all positions? This will clear any votes you\'ve already made.')) {
+                // Clear all candidate selections
+                document.querySelectorAll('.candidate-checkbox').forEach(cb => {
+                    cb.checked = false;
+                    const posId = cb.dataset.position;
+                    const label = document.getElementById(`label-${posId}-${cb.value}`);
+                    if (label) label.classList.remove('selected');
+                    cb.disabled = false;
+                });
+
+                // Clear selections
+                selections = {};
+
+                // Skip all positions
+                for (let posId = 1; posId <= {{ $votingSession->positions->count() }}; posId++) {
+                    skippedPositions[posId] = true;
+                    const skipOption = document.getElementById(`skipOption${posId}`);
+                    const skipCheckbox = document.getElementById(`skipCheckbox${posId}`);
+                    const positionCard = document.getElementById(`posCard${posId}`);
+                    if (skipOption) skipOption.classList.add('selected');
+                    if (skipCheckbox) skipCheckbox.classList.add('selected');
+                    if (positionCard) positionCard.classList.add('skipped');
+                }
+
+                updateProgress();
+            }
+        };
+
+        // Initialize any pre-selected values
+        function initializeSelections() {
+            document.querySelectorAll('.candidate-checkbox:checked').forEach(checkbox => {
+                const posId = checkbox.dataset.position;
+                const candidateId = checkbox.value;
+
+                if (!selections[posId]) selections[posId] = [];
+                if (!selections[posId].includes(candidateId)) {
+                    selections[posId].push(candidateId);
+                }
+
+                const label = document.getElementById(`label-${posId}-${candidateId}`);
+                if (label) label.classList.add('selected');
             });
+
+            updateProgress();
         }
 
-        initializeProgress();
+        initializeSelections();
 
         // Form submission validation
         document.getElementById('ballotForm').addEventListener('submit', function(e) {
             const submitBtn = document.getElementById('submitBtn');
-            if (submitBtn.disabled) {
+            const reviewedCount = parseInt(document.getElementById('progressText').textContent);
+            const totalPositions = {{ $votingSession->positions->count() }};
+
+            if (reviewedCount < totalPositions) {
                 e.preventDefault();
-                alert('Please select candidates for all positions before submitting.');
-                return false;
-            }
-
-            // Double-check all positions have selections
-            const positionIds = Array.from(document.querySelectorAll('.position-card')).map(card => {
-                const header = card.querySelector('.position-header');
-                const idMatch = card.id.match(/posCard(\d+)/);
-                return idMatch ? idMatch[1] : null;
-            }).filter(id => id);
-
-            const missingPositions = positionIds.filter(posId => !selected[posId]);
-
-            if (missingPositions.length > 0) {
-                e.preventDefault();
-                alert('Please select candidates for all positions before submitting.');
+                alert('Please either vote or skip all positions before submitting.');
                 return false;
             }
 
