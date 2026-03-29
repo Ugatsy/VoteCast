@@ -88,23 +88,39 @@ class VotingBallotController extends Controller
         return view('student.ballot', compact('votingSession', 'alreadyVoted'));
     }
 
+    private function checkEligibility($session, $user)
+    {
+        if (!$session->isActive()) {
+            return false;
+        }
+
+        switch ($session->category) {
+            case 'department':
+                if (empty($session->target_department)) {
+                    return true;
+                }
+                return $session->target_department === $user->department;
+
+            case 'course':
+                return $session->target_course === $user->department;
+
+            case 'manual':
+                return $session->manualVoters()
+                    ->where('user_id', $user->id)
+                    ->exists();
+
+            default:
+                return false;
+        }
+    }
+
     public function submit(Request $request, VotingSession $votingSession)
     {
         $user = auth()->user();
 
-        // Start transaction
         DB::beginTransaction();
 
         try {
-            // Log submission attempt
-            Log::info('Starting vote submission', [
-                'session_id' => $votingSession->id,
-                'user_id' => $user->id,
-                'allow_vote_changes' => $votingSession->allow_vote_changes,
-                'session_status' => $votingSession->status
-            ]);
-
-            // Validate eligibility and active status
             if (!$votingSession->isActive()) {
                 throw new \Exception('This election is no longer active.');
             }
@@ -121,18 +137,6 @@ class VotingBallotController extends Controller
 
             $hasExistingVotes = $existingVotes->isNotEmpty();
 
-            Log::info('Existing votes check', [
-                'has_existing_votes' => $hasExistingVotes,
-                'existing_count' => $existingVotes->count(),
-                'existing_votes' => $existingVotes->map(function($vote) {
-                    return [
-                        'position_id' => $vote->position_id,
-                        'candidate_id' => $vote->candidate_id
-                    ];
-                })->toArray()
-            ]);
-
-            // Block duplicate votes if changes not allowed
             if (!$votingSession->allow_vote_changes && $hasExistingVotes) {
                 throw new \Exception('You have already voted in this election and vote changes are not allowed.');
             }
@@ -167,7 +171,6 @@ class VotingBallotController extends Controller
                 }
             }
 
-            // Validate request
             $validator = validator($request->all(), $validationRules);
             if ($validator->fails()) {
                 throw new \Exception($validator->errors()->first());
@@ -183,47 +186,30 @@ class VotingBallotController extends Controller
                 throw new \Exception('Please vote for all positions before submitting.');
             }
 
-            // Generate receipt ID
             $receiptId = strtoupper(Str::random(8)) . '-' . time();
 
             // Remove existing votes if changes allowed
             if ($votingSession->allow_vote_changes && $hasExistingVotes) {
-                $deletedCount = Vote::where('voter_id', $user->id)
+                Vote::where('voter_id', $user->id)
                     ->where('voting_session_id', $votingSession->id)
                     ->delete();
-
-                Log::info('Removed existing votes', [
-                    'user_id' => $user->id,
-                    'session_id' => $votingSession->id,
-                    'deleted_count' => $deletedCount
-                ]);
             }
 
             // Save new votes
             $votesSaved = 0;
-            $voteRecords = [];
 
             foreach ($positions as $position) {
                 $candidateIds = is_array($submittedVotes[$position->id])
                     ? $submittedVotes[$position->id]
                     : [$submittedVotes[$position->id]];
 
-                Log::info('Saving votes for position', [
-                    'position_id' => $position->id,
-                    'position_title' => $position->title,
-                    'candidate_count' => count($candidateIds),
-                    'candidate_ids' => $candidateIds
-                ]);
-
                 foreach ($candidateIds as $index => $candidateId) {
-                    // Verify candidate belongs to position
                     $candidate = $position->candidates()->find($candidateId);
                     if (!$candidate) {
                         throw new \Exception("Invalid candidate selected for position: {$position->title}");
                     }
 
-                    // Create vote record
-                    $vote = Vote::create([
+                    Vote::create([
                         'voting_session_id' => $votingSession->id,
                         'position_id' => $position->id,
                         'candidate_id' => $candidateId,
@@ -232,8 +218,6 @@ class VotingBallotController extends Controller
                         'ip_address' => $request->ip(),
                         'user_agent' => $request->userAgent(),
                     ]);
-
-                    $voteRecords[] = $vote;
                     $votesSaved++;
                 }
             }
@@ -242,7 +226,6 @@ class VotingBallotController extends Controller
                 throw new \Exception('No votes were saved. Please try again.');
             }
 
-            // Commit transaction
             DB::commit();
 
             Log::info('Votes submitted successfully', [
@@ -258,7 +241,6 @@ class VotingBallotController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            // Rollback on error
             DB::rollBack();
 
             Log::error('Vote submission failed', [
@@ -268,7 +250,6 @@ class VotingBallotController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
 
-            // Return user-friendly error message
             return back()
                 ->withInput()
                 ->with('error', $e->getMessage());
@@ -287,5 +268,85 @@ class VotingBallotController extends Controller
         $receiptId = $request->receipt;
 
         return view('student.confirmation', compact('votingSession', 'votes', 'receiptId'));
+    }
+
+    /**
+     * Get receipt data for a voted session (API endpoint)
+     */
+    public function getReceipt($sessionId)
+    {
+        try {
+            $user = auth()->user();
+
+            Log::info('Receipt request', [
+                'session_id' => $sessionId,
+                'user_id' => $user->id,
+                'user_name' => $user->full_name
+            ]);
+
+            $votes = Vote::where('voter_id', $user->id)
+                ->where('voting_session_id', $sessionId)
+                ->with(['candidate.student', 'position', 'votingSession'])
+                ->get();
+
+            if ($votes->isEmpty()) {
+                Log::warning('No votes found for receipt', [
+                    'session_id' => $sessionId,
+                    'user_id' => $user->id
+                ]);
+                return response()->json(['error' => 'No votes found for this election'], 404);
+            }
+
+            $firstVote = $votes->first();
+
+            return response()->json([
+                'receipt_id' => $firstVote->receipt_id,
+                'voted_at' => $firstVote->created_at ? $firstVote->created_at->toISOString() : now()->toISOString(),
+                'session_title' => $firstVote->votingSession ? $firstVote->votingSession->title : 'Unknown Election',
+                'votes' => $votes->map(function($vote) {
+                    return [
+                        'position' => $vote->position ? $vote->position->title : 'Unknown Position',
+                        'candidate' => $vote->candidate && $vote->candidate->student ? $vote->candidate->student->full_name : 'Unknown Candidate',
+                        'candidate_section' => ($vote->candidate && $vote->candidate->student && $vote->candidate->student->section) ? $vote->candidate->student->section : 'N/A',
+                        'candidate_id' => $vote->candidate_id
+                    ];
+                })
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching receipt', [
+                'session_id' => $sessionId,
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to load receipt: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Show receipt as a full page
+     */
+    public function showReceiptPage($sessionId)
+    {
+        $user = auth()->user();
+
+        $votes = Vote::where('voter_id', $user->id)
+            ->where('voting_session_id', $sessionId)
+            ->with(['candidate.student', 'position', 'votingSession'])
+            ->get();
+
+        if ($votes->isEmpty()) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'No votes found for this election.');
+        }
+
+        $votingSession = $votes->first()->votingSession;
+        $receiptId = $votes->first()->receipt_id;
+
+        return view('student.receipt', compact('votes', 'votingSession', 'receiptId'));
     }
 }
