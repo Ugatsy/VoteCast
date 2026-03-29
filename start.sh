@@ -2,7 +2,9 @@
 set -e
 
 echo "Fixing permissions..."
-chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+mkdir -p /var/www/storage/logs
+touch /var/www/storage/logs/laravel.log
+chmod -R 777 /var/www/storage /var/www/bootstrap/cache
 chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache
 
 echo "Setting trusted proxies..."
