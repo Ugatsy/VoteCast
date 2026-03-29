@@ -18,7 +18,6 @@
         .ballot-header h5 { margin: 0; font-weight: 700; }
         .ballot-header small { opacity: 0.7; font-size: 0.82rem; }
 
-        /* Progress bar */
         .progress-wrap {
             background: rgba(255,255,255,0.2);
             border-radius: 4px; height: 4px; overflow: hidden; margin-top: 0.5rem;
@@ -28,7 +27,6 @@
             transition: width 0.3s ease;
         }
 
-        /* Position card */
         .position-card {
             background: #fff; border-radius: 14px;
             border: 1px solid #e2e8f0; margin-bottom: 1.5rem; overflow: hidden;
@@ -50,7 +48,6 @@
         }
         .position-status.done { color: #22c55e; }
 
-        /* Candidate option */
         .candidate-label {
             display: flex; align-items: center; gap: 1rem;
             padding: 1rem 1.25rem; cursor: pointer;
@@ -60,7 +57,8 @@
         }
         .candidate-label:last-child { border-bottom: none; }
         .candidate-label:hover { background: #f8fafc; }
-        .candidate-label input[type="radio"] { display: none; }
+        .candidate-label input[type="radio"],
+        .candidate-label input[type="checkbox"] { display: none; }
         .candidate-label.selected {
             background: #eff6ff;
             border-left: 4px solid #1a56db;
@@ -69,6 +67,9 @@
             background: #1a56db; border-color: #1a56db;
         }
         .candidate-label.selected .check-circle::after { display: block; }
+        .candidate-label.disabled-choice {
+            opacity: 0.45; cursor: not-allowed;
+        }
 
         .candidate-avatar {
             width: 56px; height: 56px; border-radius: 50%;
@@ -90,14 +91,36 @@
             transform: translate(-50%, -50%);
         }
 
-        /* Release code card */
+        /* Square check for multi-winner */
+        .check-square {
+            width: 22px; height: 22px; border-radius: 4px;
+            border: 2px solid #cbd5e1; margin-left: auto; flex-shrink: 0;
+            position: relative;
+        }
+        .candidate-label.selected .check-square {
+            background: #1a56db; border-color: #1a56db;
+        }
+        .check-square::after {
+            content: '✓'; display: none;
+            color: #fff; font-size: 13px; font-weight: 700;
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .candidate-label.selected .check-square::after { display: block; }
+
+        .multi-hint {
+            background: #fffbeb; border: 1px solid #fcd34d;
+            border-radius: 8px; padding: 0.5rem 1rem;
+            font-size: 0.78rem; color: #92400e;
+            margin: 0.5rem 1.25rem;
+        }
+
         .release-card {
             background: #fff; border-radius: 14px;
             border: 2px solid #fbbf24;
             padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
         }
 
-        /* Submit button */
         .btn-submit {
             background: #1a56db; color: #fff; border: none;
             border-radius: 12px; padding: 1rem; font-size: 1.05rem;
@@ -114,7 +137,7 @@
         <div class="d-flex justify-content-between align-items-start">
             <div>
                 <h5>{{ $votingSession->title }}</h5>
-                <small>Select one candidate per position · {{ $votingSession->positions->count() }} position(s)</small>
+                <small>{{ $votingSession->positions->count() }} position(s)</small>
             </div>
             <a href="{{ route('student.dashboard') }}"
                style="color:rgba(255,255,255,0.7);font-size:0.85rem;text-decoration:none">
@@ -169,16 +192,35 @@
             <div class="position-header">
                 <div class="position-number">{{ $index + 1 }}</div>
                 {{ $position->title }}
+                @if($position->max_winners > 1)
+                    <span style="font-size:0.72rem;color:#64748b;font-weight:400">(Select up to {{ $position->max_winners }})</span>
+                @endif
                 <span class="position-status" id="posStatus{{ $position->id }}">Not selected</span>
             </div>
 
+            @if($position->max_winners > 1)
+            <div class="multi-hint">
+                <i class="bi bi-info-circle me-1"></i>
+                You may select <strong>up to {{ $position->max_winners }} candidates</strong> for this position.
+            </div>
+            @endif
+
             @foreach($position->candidates as $candidate)
             <label class="candidate-label" id="label-{{ $position->id }}-{{ $candidate->id }}">
-                <input type="radio"
-                       name="votes[{{ $position->id }}]"
-                       value="{{ $candidate->id }}"
-                       data-position="{{ $position->id }}"
-                       required>
+                @if($position->max_winners > 1)
+                    <input type="checkbox"
+                           name="votes[{{ $position->id }}][]"
+                           value="{{ $candidate->id }}"
+                           data-position="{{ $position->id }}"
+                           data-max="{{ $position->max_winners }}">
+                @else
+                    <input type="radio"
+                           name="votes[{{ $position->id }}]"
+                           value="{{ $candidate->id }}"
+                           data-position="{{ $position->id }}"
+                           required>
+                @endif
+
                 <img src="{{ $candidate->photo_url }}"
                      class="candidate-avatar" alt="{{ $candidate->student->full_name }}">
                 <div class="flex-grow-1">
@@ -192,7 +234,12 @@
                     </div>
                     @endif
                 </div>
-                <div class="check-circle"></div>
+
+                @if($position->max_winners > 1)
+                    <div class="check-square"></div>
+                @else
+                    <div class="check-circle"></div>
+                @endif
             </label>
             @endforeach
 
@@ -221,34 +268,72 @@
     const totalPositions = {{ $votingSession->positions->count() }};
     const selected = {};
 
+    // Handle RADIO buttons (single winner)
     document.querySelectorAll('input[type="radio"]').forEach(radio => {
         radio.addEventListener('change', function () {
-            const posId    = this.dataset.position;
-            const candId   = this.value;
+            const posId  = this.dataset.position;
+            const candId = this.value;
 
-            // Deselect previous
             document.querySelectorAll(`label[id^="label-${posId}-"]`).forEach(l => l.classList.remove('selected'));
-
-            // Select current
             document.getElementById(`label-${posId}-${candId}`).classList.add('selected');
 
-            selected[posId] = candId;
-
-            // Update status label
-            const statusEl = document.getElementById(`posStatus${posId}`);
-            const name = this.closest('.candidate-label').querySelector('[style*="font-weight:600"]').textContent.trim();
-            statusEl.textContent = '✓ ' + name;
-            statusEl.classList.add('done');
-
-            // Update progress
-            const count = Object.keys(selected).length;
-            document.getElementById('progressText').textContent = count;
-            document.getElementById('progressFill').style.width = ((count / totalPositions) * 100) + '%';
-
-            // Enable submit when all positions filled
-            document.getElementById('submitBtn').disabled = count < totalPositions;
+            selected[posId] = [candId];
+            updateProgress(posId);
         });
     });
+
+    // Handle CHECKBOX buttons (multiple winners)
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', function () {
+            const posId = this.dataset.position;
+            const max   = parseInt(this.dataset.max);
+            const label = document.getElementById(`label-${posId}-${this.value}`);
+            const allCheckboxes = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]`);
+            const checked = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]:checked`);
+
+            if (this.checked && checked.length > max) {
+                this.checked = false;
+                return;
+            }
+
+            label.classList.toggle('selected', this.checked);
+
+            const rechecked = document.querySelectorAll(`input[type="checkbox"][data-position="${posId}"]:checked`);
+
+            // Disable unchosen ones if max reached
+            allCheckboxes.forEach(cb => {
+                const cbLabel = document.getElementById(`label-${posId}-${cb.value}`);
+                if (!cb.checked) {
+                    cb.disabled = rechecked.length >= max;
+                    cbLabel.classList.toggle('disabled-choice', rechecked.length >= max);
+                } else {
+                    cb.disabled = false;
+                    cbLabel.classList.remove('disabled-choice');
+                }
+            });
+
+            selected[posId] = Array.from(rechecked).map(c => c.value);
+            if (selected[posId].length === 0) delete selected[posId];
+
+            updateProgress(posId);
+        });
+    });
+
+    function updateProgress(posId) {
+        const statusEl = document.getElementById(`posStatus${posId}`);
+        if (selected[posId] && selected[posId].length > 0) {
+            statusEl.textContent = `✓ ${selected[posId].length} selected`;
+            statusEl.classList.add('done');
+        } else {
+            statusEl.textContent = 'Not selected';
+            statusEl.classList.remove('done');
+        }
+
+        const count = Object.keys(selected).length;
+        document.getElementById('progressText').textContent = count;
+        document.getElementById('progressFill').style.width = ((count / totalPositions) * 100) + '%';
+        document.getElementById('submitBtn').disabled = count < totalPositions;
+    }
 </script>
 </body>
 </html>
