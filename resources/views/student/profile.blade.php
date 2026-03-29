@@ -37,7 +37,7 @@
         .profile-avatar {
             width: 150px;
             height: 150px;
-            border-radius: 50%;
+            border-radius: 12px;
             object-fit: cover;
             border: 4px solid #1a56db;
             margin-bottom: 1rem;
@@ -51,32 +51,6 @@
             padding: 1.5rem;
             margin-bottom: 1.5rem;
         }
-
-        .candidacy-card {
-            background: #fff;
-            border-radius: 20px;
-            border: 1px solid #e2e8f0;
-            margin-bottom: 1rem;
-            transition: all 0.3s;
-        }
-
-        .candidacy-card:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .candidacy-status {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        .status-pending { background: #fef3c7; color: #d97706; }
-        .status-approved { background: #dcfce7; color: #15803d; }
-        .status-rejected { background: #fee2e2; color: #dc2626; }
 
         .photo-upload-area {
             border: 2px dashed #cbd5e1;
@@ -119,35 +93,30 @@
             transform: scale(1.1);
         }
 
-        .btn-submit-candidacy {
-            background: #1a56db;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            padding: 0.75rem 1.5rem;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-
-        .btn-submit-candidacy:hover {
-            background: #1447c0;
-            transform: translateY(-1px);
-        }
-
-        .manifesto-preview {
-            background: #f8fafc;
-            border-radius: 12px;
-            padding: 1rem;
-            font-size: 0.9rem;
-            line-height: 1.5;
-        }
-
         .toast-notification {
             position: fixed;
             bottom: 20px;
             right: 20px;
             z-index: 1100;
             min-width: 300px;
+        }
+
+        .info-row {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .info-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #94a3b8;
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-weight: 600;
+            color: #1e293b;
         }
     </style>
 </head>
@@ -214,7 +183,7 @@
 
                 @if($user->is_candidate)
                 <div class="mb-3">
-                    {!! $user->candidate_status_badge !!}
+                    <span class="badge bg-warning text-dark">Candidate Status: {{ ucfirst($user->candidate_status) }}</span>
                 </div>
                 @endif
 
@@ -233,55 +202,52 @@
                 <hr>
 
                 <div class="text-start">
-                    <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>Profile Info</h6>
-                    <p class="small mb-2"><i class="bi bi-envelope me-2"></i>{{ $user->email }}</p>
-                    <p class="small mb-2"><i class="bi bi-building me-2"></i>{{ $user->department }}</p>
-                    <p class="small mb-0"><i class="bi bi-people me-2"></i>{{ $user->section }}</p>
+                    <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>Profile Information</h6>
+
+                    <div class="info-row">
+                        <div class="info-label">Email Address</div>
+                        <div class="info-value">{{ $user->email }}</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">Department / Course</div>
+                        <div class="info-value">{{ $user->department }}</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">Section</div>
+                        <div class="info-value">{{ $user->section }}</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">Year Level</div>
+                        <div class="info-value">{{ $user->year_level }}</div>
+                    </div>
+
+                    @if($user->is_candidate)
+                    <div class="info-row">
+                        <div class="info-label">Candidate Since</div>
+                        <div class="info-value">{{ $user->candidate_applied_at ? $user->candidate_applied_at->format('M d, Y') : 'N/A' }}</div>
+                    </div>
+                    @endif
                 </div>
             </div>
         </div>
 
-        {{-- Main Content --}}
+        {{-- Main Content - Only Manifesto & Platform --}}
         <div class="col-lg-8">
-            {{-- Edit Profile Form --}}
-            <div class="profile-card">
-                <h5 class="fw-bold mb-3"><i class="bi bi-pencil-square me-2 text-primary"></i>Edit Profile</h5>
-                <form method="POST" action="{{ route('profile.update') }}">
-                    @csrf
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Full Name</label>
-                        <input type="text" name="full_name" class="form-control @error('full_name') is-invalid @enderror"
-                               value="{{ old('full_name', $user->full_name) }}" required>
-                        @error('full_name')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Section</label>
-                        <input type="text" name="section" class="form-control @error('section') is-invalid @enderror"
-                               value="{{ old('section', $user->section) }}">
-                        @error('section')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-save me-1"></i>Save Changes
-                    </button>
-                </form>
-            </div>
-
             {{-- Manifesto & Platform --}}
             <div class="profile-card">
                 <h5 class="fw-bold mb-3"><i class="bi bi-megaphone me-2 text-primary"></i>My Manifesto & Platform</h5>
+                <p class="small text-muted mb-3">Share your vision, values, and goals with the student body. This will be visible on your candidate profile.</p>
+
                 <form method="POST" action="{{ route('profile.manifesto') }}">
                     @csrf
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Personal Manifesto</label>
                         <textarea name="manifesto" class="form-control @error('manifesto') is-invalid @enderror"
-                                  rows="4" placeholder="Share your vision, values, and what you stand for...">{{ old('manifesto', $user->manifesto) }}</textarea>
-                        <div class="form-text">This will be visible on your candidate profile when you apply.</div>
+                                  rows="5" placeholder="Share your vision, values, and what you stand for...">{{ old('manifesto', $user->manifesto) }}</textarea>
+                        <div class="form-text">This will be visible on your candidate profile when you apply for a position.</div>
                         @error('manifesto')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -290,8 +256,8 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Detailed Platform</label>
                         <textarea name="platform" class="form-control @error('platform') is-invalid @enderror"
-                                  rows="6" placeholder="List your specific goals, plans, and commitments if elected...">{{ old('platform', $user->platform) }}</textarea>
-                        <div class="form-text">Provide specific details about what you plan to accomplish.</div>
+                                  rows="8" placeholder="List your specific goals, plans, and commitments if elected...">{{ old('platform', $user->platform) }}</textarea>
+                        <div class="form-text">Provide specific details about what you plan to accomplish if elected.</div>
                         @error('platform')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
@@ -303,128 +269,31 @@
                 </form>
             </div>
 
-            {{-- Apply for Candidacy --}}
-            @if($activeSessions->isNotEmpty())
+            {{-- Preview Section - Shows how manifesto will appear --}}
+            @if($user->manifesto || $user->platform)
             <div class="profile-card">
-                <h5 class="fw-bold mb-3"><i class="bi bi-trophy me-2 text-primary"></i>Apply for Candidacy</h5>
-                <p class="small text-muted mb-3">Apply to become a candidate for available positions. Your application will be reviewed by election administrators.</p>
+                <h5 class="fw-bold mb-3"><i class="bi bi-eye me-2 text-primary"></i>Preview</h5>
+                <p class="small text-muted mb-3">How your manifesto and platform will appear to voters.</p>
 
-                @foreach($activeSessions as $session)
-                    <div class="mb-4">
-                        <h6 class="fw-bold mb-2">{{ $session->title }}</h6>
-                        <div class="row g-2">
-                            @foreach($session->positions as $position)
-                                @php
-                                    $existingCandidacy = $myCandidacies[$position->id] ?? null;
-                                @endphp
-                                <div class="col-md-6">
-                                    <div class="candidacy-card p-3">
-                                        <div class="d-flex justify-content-between align-items-start mb-2">
-                                            <div>
-                                                <div class="fw-bold">{{ $position->title }}</div>
-                                                <div class="small text-muted">Max winners: {{ $position->max_winners }}</div>
-                                            </div>
-                                            @if($existingCandidacy)
-                                                <span class="candidacy-status status-{{ $existingCandidacy->is_approved ? 'approved' : 'pending' }}">
-                                                    <i class="bi {{ $existingCandidacy->is_approved ? 'bi-check-circle' : 'bi-clock-history' }}"></i>
-                                                    {{ $existingCandidacy->is_approved ? 'Approved' : 'Pending Review' }}
-                                                </span>
-                                            @endif
-                                        </div>
-
-                                        @if(!$existingCandidacy)
-                                            <button class="btn btn-sm btn-outline-primary w-100" data-bs-toggle="modal"
-                                                    data-bs-target="#applyModal"
-                                                    data-position-id="{{ $position->id }}"
-                                                    data-position-title="{{ $position->title }}"
-                                                    data-session-title="{{ $session->title }}">
-                                                <i class="bi bi-send me-1"></i>Apply for this position
-                                            </button>
-                                        @elseif(!$existingCandidacy->is_approved)
-                                            <form method="POST" action="{{ route('student.candidacy.withdraw', $existingCandidacy->id) }}" class="mt-2">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn btn-sm btn-outline-danger w-100" onclick="return confirm('Withdraw your application?')">
-                                                    <i class="bi bi-x-circle me-1"></i>Withdraw Application
-                                                </button>
-                                            </form>
-                                        @endif
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
+                @if($user->manifesto)
+                <div class="mb-3">
+                    <div class="fw-semibold mb-2">Manifesto</div>
+                    <div class="p-3 bg-light rounded" style="background: #f8fafc;">
+                        {{ $user->manifesto }}
                     </div>
-                @endforeach
+                </div>
+                @endif
+
+                @if($user->platform)
+                <div class="mb-3">
+                    <div class="fw-semibold mb-2">Platform</div>
+                    <div class="p-3 bg-light rounded" style="background: #f8fafc; white-space: pre-line;">
+                        {{ $user->platform }}
+                    </div>
+                </div>
+                @endif
             </div>
             @endif
-
-            {{-- My Candidacies (Existing) --}}
-            @if($myCandidacies->isNotEmpty())
-            <div class="profile-card">
-                <h5 class="fw-bold mb-3"><i class="bi bi-person-badge me-2 text-primary"></i>My Candidacies</h5>
-                @foreach($myCandidacies as $candidacy)
-                    <div class="border-bottom pb-3 mb-3">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <div class="fw-bold">{{ $candidacy->position->title }}</div>
-                                <div class="small text-muted">{{ $candidacy->position->votingSession->title }}</div>
-                                @if($candidacy->is_approved)
-                                    <span class="badge bg-success mt-1">Approved Candidate</span>
-                                @else
-                                    <span class="badge bg-warning text-dark mt-1">Pending Approval</span>
-                                @endif
-                            </div>
-                            @if($candidacy->manifesto)
-                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
-                                        data-bs-target="#manifesto-{{ $candidacy->id }}">
-                                    <i class="bi bi-eye"></i> View Manifesto
-                                </button>
-                            @endif
-                        </div>
-
-                        @if($candidacy->manifesto)
-                            <div class="collapse mt-2" id="manifesto-{{ $candidacy->id }}">
-                                <div class="manifesto-preview">
-                                    {!! nl2br(e($candidacy->manifesto)) !!}
-                                </div>
-                            </div>
-                        @endif
-                    </div>
-                @endforeach
-            </div>
-            @endif
-        </div>
-    </div>
-</div>
-
-{{-- Apply for Candidacy Modal --}}
-<div class="modal fade" id="applyModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form method="POST" action="{{ route('profile.candidacy.apply') }}" id="candidacyForm">
-                @csrf
-                <div class="modal-header" style="background: linear-gradient(135deg, #1a56db 0%, #1447c0 100%); color: white;">
-                    <h5 class="modal-title">
-                        <i class="bi bi-send me-2"></i>Apply for Candidacy
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" name="position_id" id="modalPositionId">
-                    <p>Apply for <strong id="modalPositionTitle"></strong> in <strong id="modalSessionTitle"></strong></p>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Your Manifesto (Optional)</label>
-                        <textarea name="manifesto" class="form-control" rows="5"
-                                  placeholder="Why should students vote for you? What are your goals?"></textarea>
-                        <div class="form-text">If left blank, your personal manifesto will be used.</div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Submit Application</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
@@ -434,21 +303,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Modal data binding
-    const applyModal = document.getElementById('applyModal');
-    if (applyModal) {
-        applyModal.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-            const positionId = button.getAttribute('data-position-id');
-            const positionTitle = button.getAttribute('data-position-title');
-            const sessionTitle = button.getAttribute('data-session-title');
-
-            document.getElementById('modalPositionId').value = positionId;
-            document.getElementById('modalPositionTitle').textContent = positionTitle;
-            document.getElementById('modalSessionTitle').textContent = sessionTitle;
-        });
-    }
-
     // Photo upload functionality
     const photoUploadArea = document.getElementById('photoUploadArea');
     const photoInput = document.getElementById('photoInput');
