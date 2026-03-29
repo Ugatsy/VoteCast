@@ -5,12 +5,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Vote extends Model
 {
-    // Enable timestamps since the table has created_at
-    // Note: The table only has created_at, not updated_at
-    // So we need to disable updated_at
-
     public $timestamps = true;
-    const UPDATED_AT = null; // Disable updated_at since it doesn't exist
+    const UPDATED_AT = null;
 
     protected $fillable = [
         'voting_session_id', 'position_id', 'candidate_id',
@@ -41,49 +37,31 @@ class Vote extends Model
         return $this->belongsTo(VotingSession::class);
     }
 
-    /**
-     * Scope to get votes for a specific session
-     */
     public function scopeForSession($query, $sessionId)
     {
         return $query->where('voting_session_id', $sessionId);
     }
 
-    /**
-     * Scope to get votes for a specific position
-     */
     public function scopeForPosition($query, $positionId)
     {
         return $query->where('position_id', $positionId);
     }
 
-    /**
-     * Scope to get votes for a specific candidate
-     */
     public function scopeForCandidate($query, $candidateId)
     {
         return $query->where('candidate_id', $candidateId);
     }
 
-    /**
-     * Scope to get votes for a specific voter
-     */
     public function scopeForVoter($query, $voterId)
     {
         return $query->where('voter_id', $voterId);
     }
 
-    /**
-     * Get vote count for a specific candidate
-     */
     public static function getCandidateVoteCount($candidateId): int
     {
         return self::where('candidate_id', $candidateId)->count();
     }
 
-    /**
-     * Get all votes for a session with relationships
-     */
     public static function getSessionVotes($sessionId)
     {
         return self::with(['candidate', 'voter', 'position'])
@@ -92,9 +70,6 @@ class Vote extends Model
             ->groupBy('position_id');
     }
 
-    /**
-     * Check if a voter has already voted in a session
-     */
     public static function hasVoted($sessionId, $voterId): bool
     {
         return self::where('voting_session_id', $sessionId)
@@ -102,9 +77,6 @@ class Vote extends Model
             ->exists();
     }
 
-    /**
-     * Get voter's votes for a specific session
-     */
     public static function getVoterVotes($sessionId, $voterId)
     {
         return self::with(['candidate', 'position'])
@@ -113,9 +85,6 @@ class Vote extends Model
             ->get();
     }
 
-    /**
-     * Get receipt data for a vote
-     */
     public function getReceiptDataAttribute(): array
     {
         return [

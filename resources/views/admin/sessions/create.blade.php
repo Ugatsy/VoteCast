@@ -51,6 +51,7 @@
                 <select name="category" class="form-select" id="categorySelect" required>
                     <option value="">— Select eligibility type —</option>
                     <option value="course"     @selected(old('category') === 'course')>By Course</option>
+                    <option value="section"    @selected(old('category') === 'section')>By Section</option>
                     <option value="department" @selected(old('category') === 'department')>By Department</option>
                     <option value="manual"     @selected(old('category') === 'manual')>Manual (specific students)</option>
                 </select>
@@ -65,6 +66,18 @@
                         <option value="{{ $course }}" @selected(old('target_course') === $course)>{{ $course }}</option>
                     @endforeach
                 </select>
+            </div>
+
+            {{-- Section target --}}
+            <div class="mb-3 d-none" id="sectionField">
+                <label class="form-label fw-semibold small">Target Section</label>
+                <select name="target_section" class="form-select">
+                    <option value="">— Select section —</option>
+                    @foreach($sections as $section)
+                        <option value="{{ $section }}" @selected(old('target_section') === $section)>{{ $section }}</option>
+                    @endforeach
+                </select>
+                <div class="form-text text-muted">Only students in this section will be able to vote.</div>
             </div>
 
             {{-- Department target --}}
@@ -107,14 +120,18 @@
 
 @push('scripts')
 <script>
-    const sel = document.getElementById('categorySelect');
+    const sel     = document.getElementById('categorySelect');
     const courseF = document.getElementById('courseField');
+    const sectionF = document.getElementById('sectionField');
     const deptF   = document.getElementById('deptField');
 
     function toggleFields() {
         courseF.classList.add('d-none');
+        sectionF.classList.add('d-none');
         deptF.classList.add('d-none');
+
         if (sel.value === 'course')     courseF.classList.remove('d-none');
+        if (sel.value === 'section')    sectionF.classList.remove('d-none');
         if (sel.value === 'department') deptF.classList.remove('d-none');
     }
 

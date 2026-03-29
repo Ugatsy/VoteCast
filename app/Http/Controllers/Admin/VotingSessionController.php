@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Candidate;
 use App\Models\Enrollment;
+use App\Models\Participation;
 use App\Models\Position;
 use App\Models\User;
 use App\Models\Vote;
@@ -24,9 +25,10 @@ class VotingSessionController extends Controller
     public function create()
     {
         $courses  = Enrollment::current()->select('course')->distinct()->orderBy('course')->pluck('course');
+        $sections = Enrollment::current()->select('section')->distinct()->orderBy('section')->pluck('section');
         $students = User::students()->active()->orderBy('full_name')->get();
 
-        return view('admin.sessions.create', compact('courses', 'students'));
+        return view('admin.sessions.create', compact('courses', 'sections', 'students'));
     }
 
     public function store(Request $request)
@@ -34,7 +36,7 @@ class VotingSessionController extends Controller
         $request->validate([
             'title'       => 'required|string|max:255',
             'description' => 'nullable|string',
-            'category'    => 'required|in:department,course,manual',
+            'category'    => 'required|in:department,course,section,manual',
             'start_date'  => 'required|date',
             'end_date'    => 'required|date|after:start_date',
         ]);
@@ -45,6 +47,7 @@ class VotingSessionController extends Controller
             'category'              => $request->category,
             'target_course'         => $request->target_course,
             'target_department'     => $request->target_department,
+            'target_section'        => $request->target_section,
             'status'                => 'scheduled',
             'start_date'            => $request->start_date,
             'end_date'              => $request->end_date,
@@ -59,7 +62,6 @@ class VotingSessionController extends Controller
 
     public function show(VotingSession $votingSession)
     {
-        // Load positions and candidates with vote counts
         $votingSession->load([
             'positions.candidates' => function($query) {
                 $query->withCount('votes')->orderBy('votes_count', 'desc');
@@ -68,16 +70,8 @@ class VotingSessionController extends Controller
             'creator'
         ]);
 
-        $totalVoters = 0;
-        if ($votingSession->category === 'course') {
-            $totalVoters = User::students()->where('department', $votingSession->target_course)->count();
-        } elseif ($votingSession->category === 'manual') {
-            $totalVoters = $votingSession->manualVoters()->count();
-        } else {
-            $totalVoters = User::students()->count();
-        }
-
-        $totalVoted = $votingSession->votes()->distinct('voter_id')->count('voter_id');
+        $totalVoters = $votingSession->total_voters;
+        $totalVoted  = $votingSession->total_votes_cast;
 
         return view('admin.sessions.show', compact('votingSession', 'totalVoters', 'totalVoted'));
     }
@@ -96,7 +90,19 @@ class VotingSessionController extends Controller
     public function candidates(VotingSession $votingSession)
     {
         $votingSession->load('positions.candidates.student');
-        $students = User::students()->active()->orderBy('full_name')->get();
+
+        // Filter students based on session category
+        $studentsQuery = User::students()->active()->orderBy('full_name');
+
+        if ($votingSession->category === 'course' && $votingSession->target_course) {
+            $studentsQuery->where('department', $votingSession->target_course);
+        } elseif ($votingSession->category === 'section' && $votingSession->target_section) {
+            $studentsQuery->where('section', $votingSession->target_section);
+        } elseif ($votingSession->category === 'department' && $votingSession->target_department) {
+            $studentsQuery->where('department', $votingSession->target_department);
+        }
+
+        $students = $studentsQuery->get();
 
         return view('admin.sessions.candidates', compact('votingSession', 'students'));
     }
@@ -129,7 +135,6 @@ class VotingSessionController extends Controller
             'photo'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-        // Prevent duplicate candidate in same position
         if ($position->candidates()->where('student_id', $request->student_id)->exists()) {
             return back()->withErrors(['student_id' => 'This student is already a candidate for this position.']);
         }
@@ -189,60 +194,40 @@ class VotingSessionController extends Controller
             ];
         });
 
-        $totalVoters = User::students()->count();
-        $totalVoted  = $votingSession->votes()->distinct('voter_id')->count('voter_id');
-        $turnout     = $totalVoters > 0 ? round(($totalVoted / $totalVoters) * 100, 1) : 0;
+        $totalVoters = $votingSession->total_voters;
+        $totalVoted  = $votingSession->total_votes_cast;
+        $turnout     = $votingSession->turnout_percentage;
 
         return view('admin.sessions.results', compact(
             'votingSession', 'results', 'totalVoters', 'totalVoted', 'turnout'
         ));
     }
 
-    /**
-     * Get real-time vote statistics for a session
-     */
     public function getVoteStats(VotingSession $votingSession)
     {
-        // Only allow if session is active or completed
         if (!in_array($votingSession->status, ['active', 'completed'])) {
             return response()->json(['error' => 'Session not available'], 403);
         }
 
-        // Load positions and candidates with vote counts
         $votingSession->load([
             'positions.candidates' => function($query) {
                 $query->withCount('votes')->orderBy('votes_count', 'desc');
             }
         ]);
 
-        // Calculate total votes
-        $totalVoted = $votingSession->votes()->distinct('voter_id')->count('voter_id');
+        $totalVoted  = $votingSession->total_votes_cast;
+        $totalVoters = $votingSession->total_voters;
 
-        // Calculate total voters based on category
-        $totalVoters = 0;
-        if ($votingSession->category === 'course') {
-            $totalVoters = User::students()
-                ->where('department', $votingSession->target_course)
-                ->count();
-        } elseif ($votingSession->category === 'manual') {
-            $totalVoters = $votingSession->manualVoters()->count();
-        } else {
-            $totalVoters = User::students()->count();
-        }
-
-        // Prepare candidate vote counts and progress bars
-        $candidates = [];
-        $progressBars = [];
+        $candidates     = [];
+        $progressBars   = [];
         $positionTotals = [];
 
         foreach ($votingSession->positions as $position) {
-            $positionTotalVotes = $position->candidates->sum('votes_count');
+            $positionTotalVotes            = $position->candidates->sum('votes_count');
             $positionTotals[$position->id] = $positionTotalVotes;
 
             foreach ($position->candidates as $candidate) {
                 $candidates[$candidate->id] = $candidate->votes_count;
-
-                // Calculate percentage for progress bar
                 $percentage = $positionTotalVotes > 0
                     ? ($candidate->votes_count / $positionTotalVotes * 100)
                     : 0;
@@ -251,12 +236,12 @@ class VotingSessionController extends Controller
         }
 
         return response()->json([
-            'total_voted' => $totalVoted,
-            'total_voters' => $totalVoters,
-            'candidates' => $candidates,
-            'progress_bars' => $progressBars,
+            'total_voted'     => $totalVoted,
+            'total_voters'    => $totalVoters,
+            'candidates'      => $candidates,
+            'progress_bars'   => $progressBars,
             'position_totals' => $positionTotals,
-            'last_update' => now()->toIso8601String()
+            'last_update'     => now()->toIso8601String()
         ]);
     }
 }
