@@ -59,6 +59,14 @@
         .vote-position { font-size: 0.82rem; color: #64748b; }
         .vote-candidate { font-weight: 600; color: #1e293b; font-size: 0.9rem; text-align: right; }
 
+        .abstain-item {
+            background: #fef3c7;
+            border-radius: 10px;
+            padding: 0.7rem 1rem;
+            margin-top: 0.5rem;
+            color: #92400e;
+        }
+
         .action-buttons { padding: 0 1.5rem 1.5rem; display: flex; gap: 0.75rem; }
         .btn-print {
             flex: 1; border: 1.5px solid #e2e8f0; background: #fff;
@@ -105,12 +113,20 @@
         {{-- Vote Summary --}}
         <div class="votes-section">
             <h6>Your Votes</h6>
-            @foreach($votes as $vote)
-            <div class="vote-item">
-                <div class="vote-position">{{ $vote->position->title }}</div>
-                <div class="vote-candidate">{{ $vote->candidate->student->full_name }}</div>
-            </div>
-            @endforeach
+            @if($votes->count() > 0)
+                @foreach($votes as $vote)
+                <div class="vote-item">
+                    <div class="vote-position">{{ $vote->position->title }}</div>
+                    <div class="vote-candidate">{{ $vote->candidate->student->full_name }}</div>
+                </div>
+                @endforeach
+            @else
+                <div class="abstain-item">
+                    <i class="bi bi-eye-slash me-2"></i>
+                    <strong>You abstained from all positions</strong>
+                    <div class="small mt-1">No votes were cast in this election. You chose to skip all positions.</div>
+                </div>
+            @endif
         </div>
 
         {{-- Buttons --}}
