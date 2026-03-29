@@ -156,7 +156,7 @@
                 <input type="text"
                        name="student_id"
                        class="id-input @error('student_id') is-invalid @enderror"
-                       placeholder="e.g.  25-10194"
+                       placeholder="e.g.  00-00000"
                        value="{{ old('student_id') }}"
                        autofocus
                        autocomplete="off"
