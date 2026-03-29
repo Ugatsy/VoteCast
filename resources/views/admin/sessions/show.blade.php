@@ -45,21 +45,7 @@
             </a>
         </div>
 
-        {{-- ── Export Buttons (shown for active or completed sessions) ── --}}
-        @if(in_array($votingSession->status, ['completed', 'active']))
-        <div class="btn-group" role="group" aria-label="Export results">
-            <a href="{{ route('admin.sessions.export.excel', $votingSession) }}"
-               class="btn btn-sm btn-success"
-               title="Download results as Excel spreadsheet">
-                <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
-            </a>
-            <a href="{{ route('admin.sessions.export.docx', $votingSession) }}"
-               class="btn btn-sm btn-primary"
-               title="Download results as Word document">
-                <i class="bi bi-file-earmark-word me-1"></i>DOCX
-            </a>
-        </div>
-        @endif
+
     </div>
 </div>
 
