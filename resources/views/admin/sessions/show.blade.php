@@ -12,16 +12,54 @@
             {{ $votingSession->start_date->format('M d, Y H:i') }} →
             {{ $votingSession->end_date->format('M d, Y H:i') }}
             &nbsp;·&nbsp; {{ ucfirst($votingSession->category) }} election
-            @if($votingSession->target_course) &nbsp;·&nbsp; {{ $votingSession->target_course }} @endif
+            @if($votingSession->category === 'course' && $votingSession->target_course)
+                &nbsp;·&nbsp; <span class="badge bg-light text-dark border" style="font-size:0.8rem">
+                    <i class="bi bi-book me-1"></i>{{ $votingSession->target_course }}
+                </span>
+            @elseif($votingSession->category === 'section' && $votingSession->target_section)
+                &nbsp;·&nbsp; <span class="badge bg-light text-dark border" style="font-size:0.8rem">
+                    <i class="bi bi-people me-1"></i>Section {{ $votingSession->target_section }}
+                </span>
+            @elseif($votingSession->category === 'department' && $votingSession->target_department)
+                &nbsp;·&nbsp; <span class="badge bg-light text-dark border" style="font-size:0.8rem">
+                    <i class="bi bi-building me-1"></i>{{ $votingSession->target_department }}
+                </span>
+            @elseif($votingSession->category === 'department' && !$votingSession->target_department)
+                &nbsp;·&nbsp; <span class="badge bg-light text-dark border" style="font-size:0.8rem">
+                    <i class="bi bi-globe me-1"></i>All Students
+                </span>
+            @elseif($votingSession->category === 'manual')
+                &nbsp;·&nbsp; <span class="badge bg-light text-dark border" style="font-size:0.8rem">
+                    <i class="bi bi-person-check me-1"></i>Manual Voter List
+                </span>
+            @endif
         </p>
     </div>
-    <div class="btn-group">
-        <a href="{{ route('admin.sessions.candidates', $votingSession) }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-person-plus me-1"></i>Manage Candidates
-        </a>
-        <a href="{{ route('admin.sessions.results', $votingSession) }}" class="btn btn-outline-success btn-sm">
-            <i class="bi bi-bar-chart me-1"></i>Results
-        </a>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <div class="btn-group">
+            <a href="{{ route('admin.sessions.candidates', $votingSession) }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-person-plus me-1"></i>Manage Candidates
+            </a>
+            <a href="{{ route('admin.sessions.results', $votingSession) }}" class="btn btn-outline-success btn-sm">
+                <i class="bi bi-bar-chart me-1"></i>Results
+            </a>
+        </div>
+
+        {{-- ── Export Buttons (shown for active or completed sessions) ── --}}
+        @if(in_array($votingSession->status, ['completed', 'active']))
+        <div class="btn-group" role="group" aria-label="Export results">
+            <a href="{{ route('admin.sessions.export.excel', $votingSession) }}"
+               class="btn btn-sm btn-success"
+               title="Download results as Excel spreadsheet">
+                <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
+            </a>
+            <a href="{{ route('admin.sessions.export.docx', $votingSession) }}"
+               class="btn btn-sm btn-primary"
+               title="Download results as Word document">
+                <i class="bi bi-file-earmark-word me-1"></i>DOCX
+            </a>
+        </div>
+        @endif
     </div>
 </div>
 
@@ -64,6 +102,27 @@
         </div>
     </div>
 </div>
+
+{{-- Completed export call-to-action banner --}}
+@if($votingSession->status === 'completed')
+<div class="alert alert-success border-0 shadow-sm d-flex align-items-center gap-3 mb-4" style="border-radius:10px">
+    <i class="bi bi-trophy-fill fs-4 text-success"></i>
+    <div class="flex-grow-1">
+        <strong>Election Completed!</strong>
+        <span class="text-muted ms-2 small">Download the official results for your records or for distribution.</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ route('admin.sessions.export.excel', $votingSession) }}"
+           class="btn btn-success btn-sm">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Download Excel
+        </a>
+        <a href="{{ route('admin.sessions.export.docx', $votingSession) }}"
+           class="btn btn-primary btn-sm">
+            <i class="bi bi-file-earmark-word me-1"></i>Download DOCX
+        </a>
+    </div>
+</div>
+@endif
 
 {{-- Positions Summary with Real-time Vote Counts --}}
 <div class="card border-0 shadow-sm" style="border-radius:10px">

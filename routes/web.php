@@ -37,6 +37,27 @@ Route::middleware('student')->group(function () {
     // Receipt API
     Route::get('/receipt/{session}', [Student\VotingBallotController::class, 'getReceipt'])->name('student.receipt');
     Route::get('/receipt-page/{session}', [Student\VotingBallotController::class, 'showReceiptPage'])->name('student.receipt.page');
+
+    // ── Student Profile Routes ────────────────────────────────────────────────
+    Route::prefix('profile')->name('profile.')->group(function () {
+        // Main profile page
+        Route::get('/', [Student\ProfileController::class, 'index'])->name('index');
+
+        // Profile updates
+        Route::post('/update', [Student\ProfileController::class, 'updateProfile'])->name('update');
+
+        // Photo management (Cloudinary)
+        Route::post('/photo', [Student\ProfileController::class, 'uploadPhoto'])->name('photo');
+        Route::delete('/photo', [Student\ProfileController::class, 'removePhoto'])->name('photo.remove');
+
+        // Manifesto & Platform
+        Route::post('/manifesto', [Student\ProfileController::class, 'updateManifesto'])->name('manifesto');
+
+        // Candidacy management
+        Route::post('/candidacy/apply', [Student\ProfileController::class, 'applyForCandidacy'])->name('candidacy.apply');
+        Route::delete('/profile/candidacy/{candidate}', [Student\ProfileController::class, 'withdrawCandidacy'])
+    ->name('profile.candidacy.withdraw');
+    });
 });
 
 /*
@@ -71,6 +92,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/sessions/{votingSession}', [Admin\VotingSessionController::class, 'show'])->name('sessions.show');
         Route::post('/sessions/{votingSession}/status', [Admin\VotingSessionController::class, 'updateStatus'])->name('sessions.status');
         Route::get('/sessions/{votingSession}/results', [Admin\VotingSessionController::class, 'results'])->name('sessions.results');
+
+        // ── Export Routes ────────────────────────────────────────────────────
+        Route::get('/sessions/{votingSession}/export/excel', [Admin\ExportController::class, 'exportExcel'])->name('sessions.export.excel');
+        Route::get('/sessions/{votingSession}/export/docx', [Admin\ExportController::class, 'exportDocx'])->name('sessions.export.docx');
 
         // ── Positions & Candidates Management ───────────────────────────────────
         Route::get('/sessions/{votingSession}/candidates', [Admin\VotingSessionController::class, 'candidates'])->name('sessions.candidates');

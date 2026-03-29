@@ -1,7 +1,9 @@
 <?php
 namespace App\Models;
 
+use App\Services\CloudinaryService;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
@@ -10,15 +12,19 @@ class User extends Authenticatable
 
     protected $fillable = [
         'student_id', 'email', 'password', 'full_name',
-        'photo', 'department', 'year_level', 'section',
+        'photo', 'photo_public_id', 'department', 'year_level', 'section',
         'role', 'is_active', 'last_login_at',
+        'manifesto', 'platform',
+        'is_candidate', 'candidate_applied_at', 'candidate_status', 'admin_remarks'
     ];
 
     protected $hidden = ['password', 'remember_token'];
 
     protected $casts = [
-        'is_active'     => 'boolean',
-        'last_login_at' => 'datetime',
+        'is_active'          => 'boolean',
+        'last_login_at'      => 'datetime',
+        'is_candidate'       => 'boolean',
+        'candidate_applied_at' => 'datetime',
     ];
 
     // ── Relationships ─────────────────────────────────────────────────────────
@@ -53,6 +59,16 @@ class User extends Authenticatable
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
+    }
+
+    public function scopeCandidates($query)
+    {
+        return $query->where('is_candidate', true);
+    }
+
+    public function scopeApprovedCandidates($query)
+    {
+        return $query->where('is_candidate', true)->where('candidate_status', 'approved');
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -112,8 +128,90 @@ class User extends Authenticatable
     public function getProfilePhotoUrlAttribute(): string
     {
         if ($this->photo) {
-            return asset('storage/' . $this->photo);
+            return $this->photo;
         }
         return "https://ui-avatars.com/api/?name=" . urlencode($this->initials) . "&background=1a56db&color=fff&size=40";
+    }
+
+    /**
+     * Update user's profile photo with Cloudinary
+     */
+    public function updatePhoto(UploadedFile $photo)
+    {
+        $cloudinary = app(CloudinaryService::class);
+
+        // Delete old photo if exists
+        if ($this->photo_public_id) {
+            $cloudinary->deletePhoto($this->photo_public_id);
+        }
+
+        // Upload new photo
+        $result = $cloudinary->uploadPhoto($photo, 'student_photos', 'student_' . $this->id);
+
+        if ($result['success']) {
+            $this->update([
+                'photo' => $result['url'],
+                'photo_public_id' => $result['public_id'],
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Delete user's profile photo
+     */
+    public function deletePhoto()
+    {
+        if ($this->photo_public_id) {
+            $cloudinary = app(CloudinaryService::class);
+            $cloudinary->deletePhoto($this->photo_public_id);
+        }
+
+        $this->update([
+            'photo' => null,
+            'photo_public_id' => null,
+        ]);
+    }
+
+    /**
+     * Check if user is a candidate for a specific position
+     */
+    public function isCandidateFor($positionId = null)
+    {
+        $query = $this->candidates()->where('is_approved', true);
+
+        if ($positionId) {
+            $query->where('position_id', $positionId);
+        }
+
+        return $query->exists();
+    }
+
+    /**
+     * Get candidate status badge HTML
+     */
+    public function getCandidateStatusBadgeAttribute(): string
+    {
+        return match($this->candidate_status) {
+            'approved' => '<span class="badge bg-success">Approved Candidate</span>',
+            'rejected' => '<span class="badge bg-danger">Rejected</span>',
+            default => '<span class="badge bg-warning text-dark">Pending Approval</span>',
+        };
+    }
+
+    /**
+     * Get full candidate name with position if applicable
+     */
+    public function getCandidateDisplayNameAttribute(): string
+    {
+        if ($this->is_candidate && $this->candidate_status === 'approved') {
+            $positions = $this->candidates()->where('is_approved', true)->with('position')->get();
+            if ($positions->isNotEmpty()) {
+                $titles = $positions->pluck('position.title')->implode(', ');
+                return $this->full_name . ' (Candidate for ' . $titles . ')';
+            }
+        }
+        return $this->full_name;
     }
 }

@@ -234,6 +234,9 @@
 <nav class="topnav">
     <div class="brand">Vote<span>Cast</span></div>
     <div class="d-flex gap-3 align-items-center">
+        <a href="{{ route('profile.index') }}" class="text-white text-decoration-none small">
+            <i class="bi bi-person-circle me-1"></i>My Profile
+        </a>
         <span class="text-white small">
             <i class="bi bi-person-circle me-1"></i>{{ $user->full_name }}
         </span>
