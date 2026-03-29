@@ -128,12 +128,11 @@
         <a href="{{ route('student.dashboard') }}" class="text-white text-decoration-none small">
             <i class="bi bi-house me-1"></i>Dashboard
         </a>
-        <a href="{{ route('profile.index') }}" class="text-white text-decoration-none small active">
-            <i class="bi bi-person-circle me-1"></i>My Profile
-        </a>
-        <span class="text-white small">
-            <i class="bi bi-person-badge me-1"></i>{{ $user->full_name }}
-        </span>
+        <div class="d-flex align-items-center gap-2" style="opacity:0.92">
+            <img src="{{ $user->profile_photo_url }}" alt="{{ $user->full_name }}"
+                 style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.4)">
+            <span class="text-white small d-none d-md-inline">{{ $user->full_name }}</span>
+        </div>
         <form method="POST" action="{{ route('student.logout') }}" class="m-0">
             @csrf
             <button class="btn btn-sm" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3)">

@@ -44,8 +44,6 @@
                 <i class="bi bi-bar-chart me-1"></i>Results
             </a>
         </div>
-
-
     </div>
 </div>
 

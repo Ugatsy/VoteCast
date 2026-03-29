@@ -234,12 +234,11 @@
 <nav class="topnav">
     <div class="brand">Vote<span>Cast</span></div>
     <div class="d-flex gap-3 align-items-center">
-        <a href="{{ route('profile.index') }}" class="text-white text-decoration-none small">
-            <i class="bi bi-person-circle me-1"></i>My Profile
+        <a href="{{ route('profile.index') }}" class="text-white text-decoration-none d-flex align-items-center gap-2" style="opacity:0.92">
+            <img src="{{ $user->profile_photo_url }}" alt="{{ $user->full_name }}"
+                 style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.4)">
+            <span class="small d-none d-md-inline">{{ $user->full_name }}</span>
         </a>
-        <span class="text-white small">
-            <i class="bi bi-person-circle me-1"></i>{{ $user->full_name }}
-        </span>
         <form method="POST" action="{{ route('student.logout') }}" class="m-0">
             @csrf
             <button class="btn btn-sm" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3)">
@@ -275,9 +274,8 @@
             <div class="profile-card mb-4">
                 <div class="row g-3 align-items-center">
                     <div class="col-auto">
-                        <div style="width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg, #1a56db, #3b82f6);display:flex;align-items:center;justify-content:center;font-size:1.8rem;color:#fff;font-weight:700">
-                            {{ strtoupper(substr($user->full_name, 0, 1)) }}
-                        </div>
+                        <img src="{{ $user->profile_photo_url }}" alt="{{ $user->full_name }}"
+                             style="width:70px;height:70px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0;">
                     </div>
                     <div class="col">
                         <div style="font-size:1.1rem;font-weight:700;color:#1e293b">{{ $user->full_name }}</div>
