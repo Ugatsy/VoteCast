@@ -126,7 +126,7 @@
     <div class="brand">Vote<span>Cast</span></div>
     <div class="d-flex gap-3 align-items-center">
         <a href="{{ route('student.dashboard') }}" class="text-white text-decoration-none small">
-            <i class="bi bi-house me-1"></i>Dashboard
+            <i class="bi bi-house me-1"></i>
         </a>
         <div class="d-flex align-items-center gap-2" style="opacity:0.92">
             <img src="{{ $user->profile_photo_url }}" alt="{{ $user->full_name }}"

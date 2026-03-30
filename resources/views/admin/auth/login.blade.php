@@ -65,7 +65,7 @@
 
     <hr class="divider my-4">
     <p class="text-center mb-0" style="font-size:0.82rem; color:#94a3b8">
-        <a href="{{ route('student.landing') }}" style="color:#94a3b8">← Back to Student Portal</a>
+        <a href="{{ route('student.landing') }}" style="color:#94a3b8">← Student Portal</a>
     </p>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

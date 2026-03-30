@@ -675,7 +675,7 @@
                 <i class="bi ${isLive ? 'bi-broadcast' : 'bi-trophy'} me-2"></i>
                 ${escapeHtml(data.session_title)}
                 <span class="badge ${isLive ? 'bg-danger' : 'bg-warning'} ms-2">
-                    ${isLive ? 'LIVE UPDATES (auto-refresh every 3s)' : 'FINAL RESULTS'}
+                    ${isLive ? 'LIVE UPDATES' : 'FINAL RESULTS'}
                 </span>
             `;
 
@@ -784,10 +784,7 @@
             if (isLive && autoRefreshInterval) {
                 html += `
                     <div class="text-center mt-3">
-                        <small class="text-muted">
-                            <i class="bi bi-arrow-repeat me-1"></i>
-                            Auto-refreshing every 3 seconds
-                        </small>
+
                     </div>
                 `;
             }
