@@ -13,6 +13,7 @@
             to { opacity: 1; transform: translateY(0); }
         }
         .candidate-card { animation: fadeIn 0.2s ease-out; }
+        .candidate-card { cursor: pointer; }
     </style>
 </head>
 <body class="bg-[#f0f4ff] font-['Segoe_UI',system-ui,sans-serif] min-h-screen">
@@ -111,10 +112,10 @@
                     $photoUrl = $candidate->photo_url;
                 @endphp
 
-                {{-- ===== PROFILE CONTAINER CARD (Inspired by reference) ===== --}}
+                {{-- ===== PROFILE CONTAINER CARD ===== --}}
                 <div class="candidate-card group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 border-2 border-slate-200 hover:shadow-xl hover:-translate-y-1 hover:border-slate-300"
                      id="card-{{ $position->id }}-{{ $candidate->id }}"
-                     onclick="toggleCandidate({{ $position->id }}, {{ $candidate->id }})">
+                     onclick="event.stopPropagation(); toggleCandidate({{ $position->id }}, {{ $candidate->id }}); return false;">
 
                     <input type="checkbox"
                            name="votes[{{ $position->id }}][]"
@@ -129,11 +130,9 @@
 
                     {{-- Gradient Background + Photo --}}
                     <div class="relative h-52 bg-gradient-to-br from-[#1a56db] via-[#7c3aed] to-[#f59e0b] overflow-hidden">
-                        {{-- Decorative circle --}}
                         <div class="absolute -bottom-6 -left-6 w-40 h-40 rounded-full bg-white/10"></div>
                         <div class="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/10"></div>
 
-                        {{-- Candidate Photo --}}
                         <img src="{{ $photoUrl }}"
                              class="absolute bottom-0 left-1/2 -translate-x-1/2 h-44 w-auto object-contain drop-shadow-2xl transition-transform duration-300 group-hover:scale-105"
                              alt="{{ $candidate->full_name }}"
@@ -152,7 +151,6 @@
 
                     {{-- Info Section --}}
                     <div class="px-4 py-3 bg-white">
-                        {{-- Section & Year --}}
                         <div class="flex gap-2 mb-3">
                             <span class="bg-slate-100 text-slate-600 text-[0.7rem] px-2 py-0.5 rounded-full">
                                 <i class="bi bi-building mr-1"></i>{{ $candidate->section }}
@@ -164,7 +162,6 @@
                             @endif
                         </div>
 
-                        {{-- Motto --}}
                         @if($motto)
                         <div class="bg-[#eff6ff] rounded-xl px-3 py-2 mb-2 flex items-start gap-1.5">
                             <i class="bi bi-quote text-[#1a56db] opacity-50 text-base mt-0.5 flex-shrink-0"></i>
@@ -172,7 +169,6 @@
                         </div>
                         @endif
 
-                        {{-- Platform --}}
                         @if($platform)
                         <div class="bg-gradient-to-r from-cyan-400 to-teal-400 rounded-xl p-3">
                             <div class="text-[0.65rem] font-bold uppercase tracking-wider text-white/80 mb-1.5 flex items-center gap-1">
@@ -192,7 +188,6 @@
                         @endif
                     </div>
                 </div>
-                {{-- ===== END PROFILE CONTAINER ===== --}}
 
                 @endforeach
             </div>
@@ -242,35 +237,18 @@
             const skippedCount = Object.keys(skippedPositions).filter(posId => skippedPositions[posId] === true).length;
             const reviewedCount = votedCount + skippedCount;
 
-            // Update UI
             document.getElementById('progressText').textContent = reviewedCount;
             const progressPercent = totalPositions > 0 ? (reviewedCount / totalPositions) * 100 : 0;
             document.getElementById('progressFill').style.width = progressPercent + '%';
             
-            // Enable/disable submit button
             const submitBtn = document.getElementById('submitBtn');
             if (submitBtn) {
                 submitBtn.disabled = reviewedCount < totalPositions;
             }
 
             // Update status for all positions
-            for (let posId in selections) {
-                if (selections[posId] && selections[posId].length > 0) {
-                    updatePositionStatus(parseInt(posId));
-                }
-            }
-            for (let posId in skippedPositions) {
-                if (skippedPositions[posId]) {
-                    updatePositionStatus(parseInt(posId));
-                }
-            }
-            
-            // Also update status for positions that are neither selected nor skipped
             @foreach($votingSession->positions as $position)
-                const posId = {{ $position->id }};
-                if ((!selections[posId] || selections[posId].length === 0) && !skippedPositions[posId]) {
-                    updatePositionStatus(posId);
-                }
+                updatePositionStatus({{ $position->id }});
             @endforeach
         }
 
@@ -286,7 +264,6 @@
                 statusEl.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-green-100 text-green-700';
                 if (container) { 
                     container.classList.remove('opacity-60'); 
-                    container.style.background = ''; 
                 }
                 if (counterEl) counterEl.textContent = `(${selections[posId].length} selected)`;
             } else if (skippedPositions[posId]) {
@@ -306,18 +283,24 @@
             const checkbox = document.getElementById(`cb-${posId}-${candidateId}`);
             const card = document.getElementById(`card-${posId}-${candidateId}`);
             
-            if (!checkbox || !card) return;
+            if (!checkbox || !card) {
+                console.error('Checkbox or card not found', posId, candidateId);
+                return;
+            }
             
             const max = parseInt(checkbox.dataset.max);
             const checked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
 
+            // If trying to check and already at max, prevent
             if (!checkbox.checked && checked.length >= max) {
                 alert(`You can only select up to ${max} candidate(s) for this position.`);
                 return;
             }
 
+            // Toggle checkbox
             checkbox.checked = !checkbox.checked;
 
+            // Update card styling
             if (checkbox.checked) {
                 card.classList.add('!border-[#1a56db]', '!shadow-[0_0_0_3px_rgba(26,86,219,0.2)]');
                 const indicator = card.querySelector('.check-indicator');
@@ -338,7 +321,7 @@
             const rechecked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
             if (rechecked.length > 0) {
                 selections[posId] = Array.from(rechecked).map(cb => cb.value);
-                // If we selected a candidate, remove from skipped if it was skipped
+                // If we selected a candidate, remove from skipped
                 if (skippedPositions[posId]) {
                     skippedPositions[posId] = false;
                     const skipOption = document.getElementById(`skipOption${posId}`);
@@ -400,7 +383,7 @@
             updateProgress();
         };
 
-        // Initialize existing selections from the server (when editing previous votes)
+        // Initialize existing selections
         document.querySelectorAll('.candidate-checkbox:checked').forEach(checkbox => {
             const posId = checkbox.dataset.position;
             const candidateId = checkbox.value;
@@ -417,7 +400,6 @@
             }
         });
         
-        // Update progress after initialization
         updateProgress();
 
         // Form submission handler
