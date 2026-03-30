@@ -61,19 +61,6 @@
         <span>Click on any candidate card to vote for them. For positions with multiple winners, you can select up to the specified limit.</span>
     </div>
 
-    {{-- <div class="bg-white rounded-xl px-4 py-3 mb-4 border border-slate-200 flex justify-between items-center flex-wrap gap-2">
-        <div class="flex gap-4">
-            <span class="flex items-center gap-2 text-sm">
-                <span class="w-6 h-6 rounded-full bg-green-500/10 text-green-700 flex items-center justify-center text-xs font-bold" id="votedCountBadge">0</span>
-                Positions voted
-            </span>
-            <span class="flex items-center gap-2 text-sm">
-                <span class="w-6 h-6 rounded-full bg-amber-500/10 text-amber-700 flex items-center justify-center text-xs font-bold" id="skippedCountBadge">0</span>
-                Positions skipped
-            </span>
-        </div>
-    </div> --}}
-
     <form method="POST" action="{{ route('student.vote', $votingSession) }}" id="ballotForm">
         @csrf
 
@@ -255,18 +242,36 @@
             const skippedCount = Object.keys(skippedPositions).filter(posId => skippedPositions[posId] === true).length;
             const reviewedCount = votedCount + skippedCount;
 
+            // Update UI
             document.getElementById('progressText').textContent = reviewedCount;
-            document.getElementById('progressFill').style.width = ((reviewedCount / totalPositions) * 100) + '%';
-            document.getElementById('votedCountBadge').textContent = votedCount;
-            document.getElementById('skippedCountBadge').textContent = skippedCount;
-
+            const progressPercent = totalPositions > 0 ? (reviewedCount / totalPositions) * 100 : 0;
+            document.getElementById('progressFill').style.width = progressPercent + '%';
+            
+            // Enable/disable submit button
             const submitBtn = document.getElementById('submitBtn');
-            if (submitBtn) submitBtn.disabled = reviewedCount < totalPositions;
-
-            for (let posId in selections) updatePositionStatus(parseInt(posId));
-            for (let posId in skippedPositions) {
-                if (skippedPositions[posId]) updatePositionStatus(parseInt(posId));
+            if (submitBtn) {
+                submitBtn.disabled = reviewedCount < totalPositions;
             }
+
+            // Update status for all positions
+            for (let posId in selections) {
+                if (selections[posId] && selections[posId].length > 0) {
+                    updatePositionStatus(parseInt(posId));
+                }
+            }
+            for (let posId in skippedPositions) {
+                if (skippedPositions[posId]) {
+                    updatePositionStatus(parseInt(posId));
+                }
+            }
+            
+            // Also update status for positions that are neither selected nor skipped
+            @foreach($votingSession->positions as $position)
+                const posId = {{ $position->id }};
+                if ((!selections[posId] || selections[posId].length === 0) && !skippedPositions[posId]) {
+                    updatePositionStatus(posId);
+                }
+            @endforeach
         }
 
         function updatePositionStatus(posId) {
@@ -274,10 +279,15 @@
             const container = document.getElementById(`posContainer${posId}`);
             const counterEl = document.getElementById(`selectedCounter${posId}`);
 
+            if (!statusEl) return;
+
             if (selections[posId] && selections[posId].length > 0) {
                 statusEl.textContent = `✓ ${selections[posId].length} selected`;
                 statusEl.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-green-100 text-green-700';
-                if (container) { container.classList.remove('opacity-60'); container.style.background = ''; }
+                if (container) { 
+                    container.classList.remove('opacity-60'); 
+                    container.style.background = ''; 
+                }
                 if (counterEl) counterEl.textContent = `(${selections[posId].length} selected)`;
             } else if (skippedPositions[posId]) {
                 statusEl.textContent = '⨯ Skipped';
@@ -295,6 +305,9 @@
         window.toggleCandidate = function(posId, candidateId) {
             const checkbox = document.getElementById(`cb-${posId}-${candidateId}`);
             const card = document.getElementById(`card-${posId}-${candidateId}`);
+            
+            if (!checkbox || !card) return;
+            
             const max = parseInt(checkbox.dataset.max);
             const checked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
 
@@ -307,27 +320,37 @@
 
             if (checkbox.checked) {
                 card.classList.add('!border-[#1a56db]', '!shadow-[0_0_0_3px_rgba(26,86,219,0.2)]');
-                card.querySelector('.check-indicator').classList.add('!bg-[#1a56db]', '!border-[#1a56db]');
-                card.querySelector('.check-indicator').innerHTML = '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>';
+                const indicator = card.querySelector('.check-indicator');
+                if (indicator) {
+                    indicator.classList.add('!bg-[#1a56db]', '!border-[#1a56db]');
+                    indicator.innerHTML = '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>';
+                }
             } else {
                 card.classList.remove('!border-[#1a56db]', '!shadow-[0_0_0_3px_rgba(26,86,219,0.2)]');
-                card.querySelector('.check-indicator').classList.remove('!bg-[#1a56db]', '!border-[#1a56db]');
-                card.querySelector('.check-indicator').innerHTML = '';
+                const indicator = card.querySelector('.check-indicator');
+                if (indicator) {
+                    indicator.classList.remove('!bg-[#1a56db]', '!border-[#1a56db]');
+                    indicator.innerHTML = '';
+                }
             }
 
+            // Update selections object
             const rechecked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
             if (rechecked.length > 0) {
                 selections[posId] = Array.from(rechecked).map(cb => cb.value);
+                // If we selected a candidate, remove from skipped if it was skipped
+                if (skippedPositions[posId]) {
+                    skippedPositions[posId] = false;
+                    const skipOption = document.getElementById(`skipOption${posId}`);
+                    const skipCheckbox = document.getElementById(`skipCheckbox${posId}`);
+                    if (skipOption) skipOption.classList.remove('!bg-amber-100');
+                    if (skipCheckbox) { 
+                        skipCheckbox.classList.remove('!bg-amber-400'); 
+                        skipCheckbox.innerHTML = ''; 
+                    }
+                }
             } else {
                 delete selections[posId];
-            }
-
-            if (selections[posId] && selections[posId].length > 0) {
-                skippedPositions[posId] = false;
-                const skipOption = document.getElementById(`skipOption${posId}`);
-                const skipCheckbox = document.getElementById(`skipCheckbox${posId}`);
-                if (skipOption) skipOption.classList.remove('!bg-amber-100');
-                if (skipCheckbox) { skipCheckbox.classList.remove('!bg-amber-400'); skipCheckbox.innerHTML = ''; }
             }
 
             updateProgress();
@@ -340,32 +363,44 @@
             if (selections[posId] && selections[posId].length > 0) {
                 if (!confirm('You have selected candidates for this position. Skipping will clear your selections. Continue?')) return;
 
+                // Clear all checkboxes for this position
                 document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]`).forEach(cb => {
                     cb.checked = false;
                     const card = document.getElementById(`card-${posId}-${cb.value}`);
                     if (card) {
                         card.classList.remove('!border-[#1a56db]', '!shadow-[0_0_0_3px_rgba(26,86,219,0.2)]');
-                        card.querySelector('.check-indicator').classList.remove('!bg-[#1a56db]', '!border-[#1a56db]');
-                        card.querySelector('.check-indicator').innerHTML = '';
+                        const indicator = card.querySelector('.check-indicator');
+                        if (indicator) {
+                            indicator.classList.remove('!bg-[#1a56db]', '!border-[#1a56db]');
+                            indicator.innerHTML = '';
+                        }
                     }
                 });
                 delete selections[posId];
             }
 
             if (skippedPositions[posId]) {
+                // Unskip
                 skippedPositions[posId] = false;
                 if (skipOption) skipOption.classList.remove('!bg-amber-100');
-                if (skipCheckbox) { skipCheckbox.classList.remove('!bg-amber-400'); skipCheckbox.innerHTML = ''; }
+                if (skipCheckbox) { 
+                    skipCheckbox.classList.remove('!bg-amber-400'); 
+                    skipCheckbox.innerHTML = ''; 
+                }
             } else {
+                // Skip
                 skippedPositions[posId] = true;
                 if (skipOption) skipOption.classList.add('!bg-amber-100');
-                if (skipCheckbox) { skipCheckbox.classList.add('!bg-amber-400'); skipCheckbox.innerHTML = '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>'; }
+                if (skipCheckbox) { 
+                    skipCheckbox.classList.add('!bg-amber-400'); 
+                    skipCheckbox.innerHTML = '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>'; 
+                }
             }
 
             updateProgress();
         };
 
-        // Initialize
+        // Initialize existing selections from the server (when editing previous votes)
         document.querySelectorAll('.candidate-checkbox:checked').forEach(checkbox => {
             const posId = checkbox.dataset.position;
             const candidateId = checkbox.value;
@@ -374,19 +409,27 @@
             const card = document.getElementById(`card-${posId}-${candidateId}`);
             if (card) {
                 card.classList.add('!border-[#1a56db]', '!shadow-[0_0_0_3px_rgba(26,86,219,0.2)]');
-                card.querySelector('.check-indicator').classList.add('!bg-[#1a56db]', '!border-[#1a56db]');
-                card.querySelector('.check-indicator').innerHTML = '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>';
+                const indicator = card.querySelector('.check-indicator');
+                if (indicator) {
+                    indicator.classList.add('!bg-[#1a56db]', '!border-[#1a56db]');
+                    indicator.innerHTML = '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>';
+                }
             }
         });
+        
+        // Update progress after initialization
         updateProgress();
 
+        // Form submission handler
         document.getElementById('ballotForm')?.addEventListener('submit', function(e) {
             const reviewedCount = parseInt(document.getElementById('progressText').textContent);
+            
             if (reviewedCount < totalPositions) {
                 e.preventDefault();
-                alert('Please either vote or skip all positions before submitting.');
+                alert(`Please either vote or skip all positions before submitting.\n\nYou have reviewed ${reviewedCount} out of ${totalPositions} positions.`);
                 return false;
             }
+            
             const submitBtn = document.getElementById('submitBtn');
             if (submitBtn) {
                 submitBtn.disabled = true;
