@@ -3,6 +3,28 @@
 
 @section('content')
 
+{{-- Session Alerts --}}
+@if(session('success'))
+<div class="alert alert-success alert-dismissible fade show shadow-sm mb-4" role="alert">
+    <i class="bi bi-check-circle me-2"></i>{{ session('success') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+@endif
+
+@if(session('warning'))
+<div class="alert alert-warning alert-dismissible fade show shadow-sm mb-4" role="alert">
+    <i class="bi bi-exclamation-triangle me-2"></i>{{ session('warning') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+@endif
+
+@if(session('error'))
+<div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4" role="alert">
+    <i class="bi bi-x-circle me-2"></i>{{ session('error') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+@endif
+
 {{-- Active Semester Card --}}
 <div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
     <div class="card-header bg-white py-3">
@@ -46,9 +68,9 @@
             <div class="col-md-3">
                 <label class="form-label small fw-semibold">Semester</label>
                 <select name="semester" class="form-select" required>
-                    <option value="1st Semester">1st Semester</option>
-                    <option value="2nd Semester">2nd Semester</option>
-                    <option value="Summer">Summer</option>
+                    <option value="1st Semester" @selected($currentSemester === '1st Semester')>1st Semester</option>
+                    <option value="2nd Semester" @selected($currentSemester === '2nd Semester')>2nd Semester</option>
+                    <option value="Summer"       @selected($currentSemester === 'Summer')>Summer</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -91,6 +113,7 @@
                     <th>Skipped</th>
                     <th>Uploaded By</th>
                     <th>Date</th>
+                    <th>Status</th>
                 </tr>
             </thead>
             <tbody>
@@ -110,10 +133,24 @@
                 </td>
                 <td class="small">{{ $batch->uploader->full_name ?? '—' }}</td>
                 <td class="small text-muted">{{ $batch->created_at->format('M d, Y H:i') }}</td>
+                <td>
+                    {{-- FIX: Show a clear "Duplicate" badge when nothing was imported --}}
+                    @if($batch->imported_records === 0 && $batch->skipped_records > 0)
+                        <span class="badge bg-secondary" title="All records were already enrolled">
+                            <i class="bi bi-arrow-repeat me-1"></i>Duplicate
+                        </span>
+                    @elseif($batch->imported_records > 0)
+                        <span class="badge bg-success">
+                            <i class="bi bi-check2 me-1"></i>OK
+                        </span>
+                    @else
+                        <span class="badge bg-light text-muted border">Empty</span>
+                    @endif
+                </td>
             </tr>
             @empty
             <tr>
-                <td colspan="6" class="text-center text-muted py-4">No uploads yet.</td>
+                <td colspan="7" class="text-center text-muted py-4">No uploads yet.</td>
             </tr>
             @endforelse
             </tbody>
@@ -160,8 +197,34 @@
         </table>
     </div>
     @if($enrollments->hasPages())
-    <div class="card-footer bg-white">
-        {{ $enrollments->links() }}
+    <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2 px-3">
+        <small class="text-muted">
+            Showing {{ $enrollments->firstItem() }}–{{ $enrollments->lastItem() }} of {{ $enrollments->total() }} students
+        </small>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                {{-- Previous --}}
+                @if($enrollments->onFirstPage())
+                    <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                @else
+                    <li class="page-item"><a class="page-link" href="{{ $enrollments->previousPageUrl() }}">Previous</a></li>
+                @endif
+
+                {{-- Page Numbers --}}
+                @foreach($enrollments->getUrlRange(1, $enrollments->lastPage()) as $page => $url)
+                    <li class="page-item {{ $page == $enrollments->currentPage() ? 'active' : '' }}">
+                        <a class="page-link" href="{{ $url }}">{{ $page }}</a>
+                    </li>
+                @endforeach
+
+                {{-- Next --}}
+                @if($enrollments->hasMorePages())
+                    <li class="page-item"><a class="page-link" href="{{ $enrollments->nextPageUrl() }}">Next</a></li>
+                @else
+                    <li class="page-item disabled"><span class="page-link">Next</span></li>
+                @endif
+            </ul>
+        </nav>
     </div>
     @endif
 </div>
