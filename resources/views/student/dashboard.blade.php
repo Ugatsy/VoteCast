@@ -299,11 +299,11 @@
                     </div>
                     <div class="stat-item">
                         <div class="stat-number text-success">{{ $votedActiveSessions->count() }}</div>
-                        <div class="stat-label-small">Active Voted</div>
+                        <div class="stat-label-small">Active</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-number text-info">{{ $completedVotedSessions->count() }}</div>
-                        <div class="stat-label-small">Completed Voted</div>
+                        <div class="stat-label-small">Completed</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-number text-danger">{{ $missedSessions->count() }}</div>
