@@ -18,17 +18,20 @@
             flex-shrink: 0;
             scroll-snap-align: start;
             transition: all 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: pan-y pinch-zoom;
         }
 
-        /* Horizontal scroll container for mobile — responsive hybrid */
+        /* Horizontal scroll container for mobile — smooth scrolling with native momentum */
         .candidates-scroll-container {
             display: flex;
             flex-wrap: wrap;
             gap: 1.25rem;
             padding: 1.25rem;
+            touch-action: pan-y pinch-zoom;
         }
 
-        /* On mobile (<768px): force horizontal scroll, snap, no wrap */
+        /* On mobile (<768px): force horizontal scroll, snap, smooth momentum scrolling */
         @media (max-width: 768px) {
             .candidates-scroll-container {
                 flex-wrap: nowrap;
@@ -36,14 +39,16 @@
                 overflow-y: visible;
                 scroll-snap-type: x mandatory;
                 -webkit-overflow-scrolling: touch;
+                scroll-behavior: smooth;
                 scrollbar-width: thin;
                 padding: 1rem 1rem 1.5rem 1rem;
                 gap: 1rem;
                 margin-bottom: 0.5rem;
+                touch-action: pan-x pan-y;
             }
 
             .candidates-scroll-container::-webkit-scrollbar {
-                height: 6px;
+                height: 4px;
             }
 
             .candidates-scroll-container::-webkit-scrollbar-track {
@@ -58,13 +63,17 @@
 
             .candidate-card {
                 width: 280px;
-                max-width: 85vw;
+                max-width: 82vw;
                 flex-shrink: 0;
                 scroll-snap-align: start;
                 margin-right: 0;
+                touch-action: pan-y pinch-zoom;
             }
 
-            /* small indicator hint */
+            .candidate-card:active {
+                transform: scale(0.98);
+            }
+
             .scroll-hint {
                 display: flex;
                 align-items: center;
@@ -74,10 +83,11 @@
                 margin-top: -0.5rem;
                 margin-bottom: 0.25rem;
                 padding-right: 0.5rem;
+                opacity: 0.7;
             }
         }
 
-        /* Tablet and desktop: keep grid layout but preserve flex wrap */
+        /* Tablet and desktop: keep grid layout */
         @media (min-width: 769px) {
             .candidates-scroll-container {
                 display: grid;
@@ -101,35 +111,47 @@
             transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
         }
 
-        .candidate-card:active {
-            transform: scale(0.98);
-        }
-
-        /* Ensure skip option stays properly styled */
         .skip-checkbox {
             transition: all 0.2s;
         }
 
-        /* prevent text selection on double-tap */
         .candidate-card, .skip-option-area {
             user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* Better touch feedback */
-        .candidate-card:active {
-            opacity: 0.9;
-        }
-
-        /* gradient image area preserves proportions */
         .candidate-card .relative.h-52 {
             min-height: 13rem;
+        }
+
+        /* Ensure vertical scrolling is never blocked */
+        body {
+            overflow-x: hidden;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Allow vertical scroll even when touching cards */
+        .candidate-card,
+        .skip-option-area,
+        button,
+        a {
+            touch-action: manipulation;
+        }
+
+        /* Prevent any element from blocking vertical scroll */
+        * {
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Make scroll containers work properly */
+        .candidates-scroll-container {
+            -webkit-overflow-scrolling: touch;
         }
     </style>
 </head>
 <body class="bg-[#f0f4ff] font-['Segoe_UI',system-ui,sans-serif] min-h-screen">
 
-{{-- HEADER --}}
 <div class="sticky top-0 z-50 bg-[#1a56db] text-white px-6 py-5 shadow-[0_2px_10px_rgba(26,86,219,0.3)]">
     <div class="max-w-[1000px] mx-auto">
         <div class="flex justify-between items-start">
@@ -193,7 +215,6 @@
 
         @foreach($votingSession->positions as $index => $position)
         <div class="bg-white rounded-[20px] border border-slate-200 mb-8 overflow-hidden transition-all duration-300 shadow-sm" id="posContainer{{ $position->id }}">
-            {{-- Position Header --}}
             <div class="bg-gradient-to-r from-slate-50 to-slate-100 px-5 py-4 border-b-2 border-slate-200 flex items-center justify-between flex-wrap gap-3">
                 <div class="flex items-center gap-3 flex-wrap">
                     <div class="w-8 h-8 rounded-full bg-[#1a56db] text-white flex items-center justify-center text-sm font-bold">{{ $index + 1 }}</div>
@@ -215,13 +236,12 @@
             </div>
             @endif
 
-            {{-- HORIZONTAL SCROLL CONTAINER (mobile swipe) --}}
             @php
                 $candidateCount = $position->candidates->count();
             @endphp
             @if($candidateCount > 0)
                 <div class="scroll-hint md:hidden text-right pr-4 pt-2 text-[11px] text-blue-600 flex justify-end items-center gap-1">
-                    {{-- <i class="bi bi-chevron-left"></i> swipe to see more <i class="bi bi-chevron-right"></i> --}}
+                    <i class="bi bi-chevron-left"></i> swipe horizontally to browse <i class="bi bi-chevron-right"></i>
                 </div>
             @endif
 
@@ -233,7 +253,6 @@
                     $photoUrl = $candidate->photo_url;
                 @endphp
 
-                {{-- ===== PROFILE CONTAINER CARD (touch optimized) ===== --}}
                 <div class="candidate-card group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 border-2 border-slate-200 hover:shadow-xl hover:-translate-y-1 active:scale-[0.98]"
                      id="card-{{ $position->id }}-{{ $candidate->id }}"
                      onclick="event.stopPropagation(); toggleCandidate({{ $position->id }}, {{ $candidate->id }}); return false;">
@@ -246,10 +265,8 @@
                            class="candidate-checkbox hidden"
                            id="cb-{{ $position->id }}-{{ $candidate->id }}">
 
-                    {{-- Check Indicator --}}
                     <div class="check-indicator absolute top-3 right-3 w-6 h-6 rounded-full bg-white border-2 border-slate-300 flex items-center justify-center transition-all z-10 shadow-sm"></div>
 
-                    {{-- Gradient Background + Photo --}}
                     <div class="relative h-52 bg-gradient-to-br from-[#1a56db] via-[#7c3aed] to-[#f59e0b] overflow-hidden">
                         <div class="absolute -bottom-6 -left-6 w-40 h-40 rounded-full bg-white/10"></div>
                         <div class="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/10"></div>
@@ -261,17 +278,12 @@
                              onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode(substr($candidate->full_name, 0, 2)) }}&background=1a56db&color=fff&size=200'">
                     </div>
 
-                    {{-- Name Bar --}}
                     <div class="relative">
-                        {{-- <div class="bg-slate-800 px-4 py-2">
-                            <div class="text-white font-extrabold text-lg uppercase tracking-wide leading-tight">{{ $candidate->last_name ?? explode(' ', $candidate->full_name)[1] ?? $candidate->full_name }}</div>
-                        </div> --}}
                         <div class="bg-[#dc2626] px-4 py-1.5">
                             <div class="text-white font-bold text-sm uppercase">{{ $candidate->first_name ?? $candidate->full_name }}</div>
                         </div>
                     </div>
 
-                    {{-- Info Section --}}
                     <div class="px-4 py-3 bg-white">
                         <div class="flex gap-2 mb-3 flex-wrap">
                             <span class="bg-slate-100 text-slate-600 text-[0.7rem] px-2 py-0.5 rounded-full">
@@ -325,7 +337,6 @@
             </div>
             @endif
 
-            {{-- Skip Option --}}
             <div class="bg-amber-50 border-t border-amber-200 px-5 py-3 flex items-center justify-between cursor-pointer transition-colors hover:bg-amber-100 skip-option-area"
                  id="skipOption{{ $position->id }}" onclick="event.stopPropagation(); toggleSkipPosition({{ $position->id }})">
                 <div class="flex items-center gap-2 text-sm">
@@ -356,22 +367,26 @@
         const totalPositions = {{ $votingSession->positions->count() }};
         let selections = {};
         let skippedPositions = {};
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isHorizontalScroll = false;
 
         function updateProgress() {
             const votedCount = Object.keys(selections).filter(posId => selections[posId] && selections[posId].length > 0).length;
             const skippedCount = Object.keys(skippedPositions).filter(posId => skippedPositions[posId] === true).length;
             const reviewedCount = votedCount + skippedCount;
 
-            document.getElementById('progressText').textContent = reviewedCount;
+            const progressTextEl = document.getElementById('progressText');
+            const progressFillEl = document.getElementById('progressFill');
+            if (progressTextEl) progressTextEl.textContent = reviewedCount;
             const progressPercent = totalPositions > 0 ? (reviewedCount / totalPositions) * 100 : 0;
-            document.getElementById('progressFill').style.width = progressPercent + '%';
+            if (progressFillEl) progressFillEl.style.width = progressPercent + '%';
 
             const submitBtn = document.getElementById('submitBtn');
             if (submitBtn) {
                 submitBtn.disabled = reviewedCount < totalPositions;
             }
 
-            // Update status for all positions
             @foreach($votingSession->positions as $position)
                 updatePositionStatus({{ $position->id }});
             @endforeach
@@ -387,9 +402,7 @@
             if (selections[posId] && selections[posId].length > 0) {
                 statusEl.textContent = `✓ ${selections[posId].length} selected`;
                 statusEl.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-green-100 text-green-700';
-                if (container) {
-                    container.classList.remove('opacity-60');
-                }
+                if (container) container.classList.remove('opacity-60');
                 if (counterEl) counterEl.textContent = `(${selections[posId].length} selected)`;
             } else if (skippedPositions[posId]) {
                 statusEl.textContent = '⨯ Skipped';
@@ -408,24 +421,18 @@
             const checkbox = document.getElementById(`cb-${posId}-${candidateId}`);
             const card = document.getElementById(`card-${posId}-${candidateId}`);
 
-            if (!checkbox || !card) {
-                console.error('Checkbox or card not found', posId, candidateId);
-                return;
-            }
+            if (!checkbox || !card) return;
 
             const max = parseInt(checkbox.dataset.max);
             const checked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
 
-            // If trying to check and already at max, prevent
             if (!checkbox.checked && checked.length >= max) {
                 alert(`You can only select up to ${max} candidate(s) for this position.`);
                 return;
             }
 
-            // Toggle checkbox
             checkbox.checked = !checkbox.checked;
 
-            // Update card styling
             if (checkbox.checked) {
                 card.classList.add('!border-[#1a56db]', '!shadow-[0_0_0_3px_rgba(26,86,219,0.2)]');
                 const indicator = card.querySelector('.check-indicator');
@@ -442,11 +449,9 @@
                 }
             }
 
-            // Update selections object
             const rechecked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
             if (rechecked.length > 0) {
                 selections[posId] = Array.from(rechecked).map(cb => cb.value);
-                // If we selected a candidate, remove from skipped
                 if (skippedPositions[posId]) {
                     skippedPositions[posId] = false;
                     const skipOption = document.getElementById(`skipOption${posId}`);
@@ -471,7 +476,6 @@
             if (selections[posId] && selections[posId].length > 0) {
                 if (!confirm('You have selected candidates for this position. Skipping will clear your selections. Continue?')) return;
 
-                // Clear all checkboxes for this position
                 document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]`).forEach(cb => {
                     cb.checked = false;
                     const card = document.getElementById(`card-${posId}-${cb.value}`);
@@ -488,7 +492,6 @@
             }
 
             if (skippedPositions[posId]) {
-                // Unskip
                 skippedPositions[posId] = false;
                 if (skipOption) skipOption.classList.remove('!bg-amber-100');
                 if (skipCheckbox) {
@@ -496,7 +499,6 @@
                     skipCheckbox.innerHTML = '';
                 }
             } else {
-                // Skip
                 skippedPositions[posId] = true;
                 if (skipOption) skipOption.classList.add('!bg-amber-100');
                 if (skipCheckbox) {
@@ -508,7 +510,6 @@
             updateProgress();
         };
 
-        // Initialize existing selections (if any from old session)
         document.querySelectorAll('.candidate-checkbox:checked').forEach(checkbox => {
             const posId = checkbox.dataset.position;
             const candidateId = checkbox.value;
@@ -527,7 +528,6 @@
 
         updateProgress();
 
-        // Form submission handler
         const form = document.getElementById('ballotForm');
         if (form) {
             form.addEventListener('submit', function(e) {
@@ -548,26 +548,63 @@
             });
         }
 
-        // Optional: Add touch smoothness to scroll containers (just for better experience)
         const scrollContainers = document.querySelectorAll('.candidates-scroll-container');
+
         scrollContainers.forEach(container => {
-            let isDown = false;
-            let startX;
-            let scrollLeft;
+            let startX = 0;
+            let startScrollLeft = 0;
+            let isDragging = false;
+
             container.addEventListener('touchstart', (e) => {
-                isDown = true;
-                startX = e.touches[0].pageX - container.offsetLeft;
-                scrollLeft = container.scrollLeft;
-            });
-            container.addEventListener('touchend', () => {
-                isDown = false;
-            });
+                startX = e.touches[0].pageX;
+                startScrollLeft = container.scrollLeft;
+                isDragging = true;
+            }, { passive: true });
+
             container.addEventListener('touchmove', (e) => {
-                if (!isDown) return;
-                const x = e.touches[0].pageX - container.offsetLeft;
-                const walk = (x - startX) * 1.2;
-                container.scrollLeft = scrollLeft - walk;
-                e.preventDefault();
+                if (!isDragging) return;
+                const currentX = e.touches[0].pageX;
+                const diffX = startX - currentX;
+                const newScrollLeft = startScrollLeft + diffX;
+
+                if (Math.abs(diffX) > 5) {
+                    container.scrollLeft = newScrollLeft;
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            container.addEventListener('touchend', () => {
+                isDragging = false;
+            });
+
+            container.addEventListener('touchcancel', () => {
+                isDragging = false;
+            });
+        });
+
+        const candidateCards = document.querySelectorAll('.candidate-card');
+        candidateCards.forEach(card => {
+            card.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                isHorizontalScroll = false;
+            });
+
+            card.addEventListener('touchmove', (e) => {
+                const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
+                const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
+
+                if (deltaX > deltaY && deltaX > 8) {
+                    isHorizontalScroll = true;
+                    e.preventDefault();
+                }
+            });
+
+            card.addEventListener('click', (e) => {
+                if (isHorizontalScroll) {
+                    e.stopPropagation();
+                    return;
+                }
             });
         });
     });
