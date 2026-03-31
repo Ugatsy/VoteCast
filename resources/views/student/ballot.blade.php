@@ -177,14 +177,6 @@
                 </div>
             </div>
 
-            @if($position->max_winners > 1)
-            <div class="bg-amber-50 border-b border-amber-200 px-5 py-2 text-xs text-amber-800 flex items-center gap-2">
-                <i class="bi bi-info-circle"></i>
-                <span>You can vote for multiple candidates in this position</span>
-                <span class="ml-auto font-semibold" id="selectedCounter{{ $position->id }}">(0 selected)</span>
-            </div>
-            @endif
-
             {{-- Candidates --}}
             <div class="candidates-scroll-container" id="scrollContainer{{ $position->id }}">
                 @foreach($position->candidates as $candidate)
