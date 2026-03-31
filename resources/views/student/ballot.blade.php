@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>VoteCast — Ballot | Mobile Optimized</title>
+    <title>VoteCast — Ballot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
@@ -12,149 +12,13 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
-        .candidate-card {
-            animation: fadeIn 0.2s ease-out;
-            cursor: pointer;
-            flex-shrink: 0;
-            scroll-snap-align: start;
-            transition: all 0.2s ease;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        /* Horizontal scroll container - native smooth scrolling like vertical */
-        .candidates-scroll-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1.25rem;
-            padding: 1.25rem;
-        }
-
-        /* On mobile: pure horizontal scroll with native momentum */
-        @media (max-width: 768px) {
-            .candidates-scroll-container {
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                overflow-y: visible;
-                scroll-snap-type: x mandatory;
-                -webkit-overflow-scrolling: touch;
-                scroll-behavior: smooth;
-                scrollbar-width: thin;
-                padding: 1rem 1rem 1.5rem 1rem;
-                gap: 1rem;
-                margin-bottom: 0.5rem;
-                /* Native scrolling - no custom drag handlers needed */
-                touch-action: pan-x pan-y;
-            }
-
-            .candidates-scroll-container::-webkit-scrollbar {
-                height: 4px;
-            }
-
-            .candidates-scroll-container::-webkit-scrollbar-track {
-                background: #e2e8f0;
-                border-radius: 10px;
-            }
-
-            .candidates-scroll-container::-webkit-scrollbar-thumb {
-                background: #1a56db;
-                border-radius: 10px;
-            }
-
-            .candidate-card {
-                width: 280px;
-                max-width: 82vw;
-                flex-shrink: 0;
-                scroll-snap-align: start;
-                margin-right: 0;
-            }
-
-            .candidate-card:active {
-                transform: scale(0.98);
-            }
-
-            .scroll-hint {
-                display: flex;
-                align-items: center;
-                justify-content: flex-end;
-                font-size: 0.7rem;
-                color: #1e40af;
-                margin-top: -0.5rem;
-                margin-bottom: 0.25rem;
-                padding-right: 0.5rem;
-                opacity: 0.7;
-                pointer-events: none;
-            }
-        }
-
-        /* Tablet and desktop: keep grid layout */
-        @media (min-width: 769px) {
-            .candidates-scroll-container {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                gap: 1.5rem;
-                overflow-x: visible;
-                flex-wrap: wrap;
-                padding: 1.5rem;
-            }
-            .candidate-card {
-                width: auto;
-                scroll-snap-align: none;
-            }
-            .scroll-hint {
-                display: none;
-            }
-        }
-
-        /* Smooth card interactions */
-        .candidate-card {
-            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-        }
-
-        .skip-checkbox {
-            transition: all 0.2s;
-        }
-
-        .candidate-card, .skip-option-area {
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        .candidate-card .relative.h-52 {
-            min-height: 13rem;
-        }
-
-        /* Ensure perfect vertical scrolling everywhere */
-        body {
-            overflow-x: hidden;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        /* Allow natural scrolling on all elements */
-        * {
-            -webkit-overflow-scrolling: touch;
-        }
-
-        /* Cards don't block vertical scroll */
-        .candidate-card {
-            touch-action: manipulation;
-        }
-
-        /* Scroll container gets native horizontal scroll */
-        .candidates-scroll-container {
-            -webkit-overflow-scrolling: touch;
-            scroll-behavior: smooth;
-        }
-
-        /* Prevent any custom drag from interfering */
-        .candidates-scroll-container:active {
-            cursor: default;
-        }
+        .candidate-card { animation: fadeIn 0.2s ease-out; }
+        .candidate-card { cursor: pointer; }
     </style>
 </head>
 <body class="bg-[#f0f4ff] font-['Segoe_UI',system-ui,sans-serif] min-h-screen">
 
+{{-- HEADER --}}
 <div class="sticky top-0 z-50 bg-[#1a56db] text-white px-6 py-5 shadow-[0_2px_10px_rgba(26,86,219,0.3)]">
     <div class="max-w-[1000px] mx-auto">
         <div class="flex justify-between items-start">
@@ -193,10 +57,9 @@
     </div>
     @endif
 
-    <div class="bg-[#e0e7ff] rounded-lg px-4 py-3 mb-4 text-sm text-[#1e40af] flex items-center gap-2 flex-wrap">
+    <div class="bg-[#e0e7ff] rounded-lg px-4 py-3 mb-4 text-sm text-[#1e40af] flex items-center gap-2">
         <i class="bi bi-info-circle-fill"></i>
-        <span>Tap on any candidate card to vote. On mobile, scroll horizontally to browse candidates — just like scrolling vertically.</span>
-        <i class="bi bi-arrow-left-right ml-auto text-blue-600 hidden md:inline"></i>
+        <span>Click on any candidate card to vote for them. For positions with multiple winners, you can select up to the specified limit.</span>
     </div>
 
     <form method="POST" action="{{ route('student.vote', $votingSession) }}" id="ballotForm">
@@ -217,7 +80,8 @@
         @endif
 
         @foreach($votingSession->positions as $index => $position)
-        <div class="bg-white rounded-[20px] border border-slate-200 mb-8 overflow-hidden transition-all duration-300 shadow-sm" id="posContainer{{ $position->id }}">
+        <div class="bg-white rounded-[20px] border border-slate-200 mb-8 overflow-hidden transition-all duration-300" id="posContainer{{ $position->id }}">
+            {{-- Position Header --}}
             <div class="bg-gradient-to-r from-slate-50 to-slate-100 px-5 py-4 border-b-2 border-slate-200 flex items-center justify-between flex-wrap gap-3">
                 <div class="flex items-center gap-3 flex-wrap">
                     <div class="w-8 h-8 rounded-full bg-[#1a56db] text-white flex items-center justify-center text-sm font-bold">{{ $index + 1 }}</div>
@@ -232,23 +96,15 @@
             </div>
 
             @if($position->max_winners > 1)
-            <div class="bg-amber-50 border-b border-amber-200 px-5 py-2 text-xs text-amber-800 flex items-center gap-2 flex-wrap">
+            <div class="bg-amber-50 border-b border-amber-200 px-5 py-2 text-xs text-amber-800 flex items-center gap-2">
                 <i class="bi bi-info-circle"></i>
                 <span>You can vote for multiple candidates in this position</span>
                 <span class="ml-auto font-semibold" id="selectedCounter{{ $position->id }}">(0 selected)</span>
             </div>
             @endif
 
-            @php
-                $candidateCount = $position->candidates->count();
-            @endphp
-            @if($candidateCount > 0)
-                <div class="scroll-hint md:hidden text-right pr-4 pt-2 text-[11px] text-blue-600 flex justify-end items-center gap-1">
-                    {{-- <i class="bi bi-chevron-left"></i> scroll horizontally → <i class="bi bi-chevron-right"></i> --}}
-                </div>
-            @endif
-
-            <div class="candidates-scroll-container" id="scrollContainer{{ $position->id }}">
+            {{-- Candidates Grid --}}
+            <div class="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 @foreach($position->candidates as $candidate)
                 @php
                     $motto = $candidate->student->manifesto ?? null;
@@ -256,7 +112,8 @@
                     $photoUrl = $candidate->photo_url;
                 @endphp
 
-                <div class="candidate-card group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 border-2 border-slate-200 hover:shadow-xl hover:-translate-y-1 active:scale-[0.98]"
+                {{-- ===== PROFILE CONTAINER CARD ===== --}}
+                <div class="candidate-card group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 border-2 border-slate-200 hover:shadow-xl hover:-translate-y-1 hover:border-slate-300"
                      id="card-{{ $position->id }}-{{ $candidate->id }}"
                      onclick="event.stopPropagation(); toggleCandidate({{ $position->id }}, {{ $candidate->id }}); return false;">
 
@@ -268,8 +125,10 @@
                            class="candidate-checkbox hidden"
                            id="cb-{{ $position->id }}-{{ $candidate->id }}">
 
-                    <div class="check-indicator absolute top-3 right-3 w-6 h-6 rounded-full bg-white border-2 border-slate-300 flex items-center justify-center transition-all z-10 shadow-sm"></div>
+                    {{-- Check Indicator --}}
+                    <div class="check-indicator absolute top-3 right-3 w-6 h-6 rounded-full bg-white border-2 border-slate-300 flex items-center justify-center transition-all z-10"></div>
 
+                    {{-- Gradient Background + Photo --}}
                     <div class="relative h-52 bg-gradient-to-br from-[#1a56db] via-[#7c3aed] to-[#f59e0b] overflow-hidden">
                         <div class="absolute -bottom-6 -left-6 w-40 h-40 rounded-full bg-white/10"></div>
                         <div class="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/10"></div>
@@ -277,20 +136,24 @@
                         <img src="{{ $photoUrl }}"
                              class="absolute bottom-0 left-1/2 -translate-x-1/2 h-44 w-auto object-contain drop-shadow-2xl transition-transform duration-300 group-hover:scale-105"
                              alt="{{ $candidate->full_name }}"
-                             loading="lazy"
                              onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode(substr($candidate->full_name, 0, 2)) }}&background=1a56db&color=fff&size=200'">
                     </div>
 
+                    {{-- Name Bar --}}
                     <div class="relative">
+                        <div class="bg-slate-800 px-4 py-2">
+                            <div class="text-white font-extrabold text-lg uppercase tracking-wide leading-tight">{{ $candidate->last_name ?? '' }}</div>
+                        </div>
                         <div class="bg-[#dc2626] px-4 py-1.5">
                             <div class="text-white font-bold text-sm uppercase">{{ $candidate->first_name ?? $candidate->full_name }}</div>
                         </div>
                     </div>
 
+                    {{-- Info Section --}}
                     <div class="px-4 py-3 bg-white">
-                        <div class="flex gap-2 mb-3 flex-wrap">
+                        <div class="flex gap-2 mb-3">
                             <span class="bg-slate-100 text-slate-600 text-[0.7rem] px-2 py-0.5 rounded-full">
-                                <i class="bi bi-building mr-1"></i>{{ $candidate->section ?? 'N/A' }}
+                                <i class="bi bi-building mr-1"></i>{{ $candidate->section }}
                             </span>
                             @if($candidate->year_level)
                             <span class="bg-slate-100 text-slate-600 text-[0.7rem] px-2 py-0.5 rounded-full">
@@ -302,7 +165,7 @@
                         @if($motto)
                         <div class="bg-[#eff6ff] rounded-xl px-3 py-2 mb-2 flex items-start gap-1.5">
                             <i class="bi bi-quote text-[#1a56db] opacity-50 text-base mt-0.5 flex-shrink-0"></i>
-                            <span class="text-[#1e293b] text-xs italic font-semibold leading-snug">{{ Str::limit($motto, 90) }}</span>
+                            <span class="text-[#1e293b] text-xs italic font-semibold leading-snug">{{ $motto }}</span>
                         </div>
                         @endif
 
@@ -312,12 +175,9 @@
                                 <i class="bi bi-list-check"></i> PLATFORM
                             </div>
                             <ul class="mb-0 pl-3" style="list-style:disc;color:white">
-                                @foreach(array_slice(array_filter(explode("\n", $platform)), 0, 3) as $point)
-                                    <li class="text-white text-xs leading-relaxed">{{ Str::limit(trim($point), 55) }}</li>
+                                @foreach(array_slice(array_filter(explode("\n", $platform)), 0, 4) as $point)
+                                    <li class="text-white text-xs leading-relaxed">{{ trim($point) }}</li>
                                 @endforeach
-                                @if(count(array_filter(explode("\n", $platform))) > 3)
-                                    <li class="text-white text-[0.65rem] italic">+ more</li>
-                                @endif
                             </ul>
                         </div>
                         @elseif(!$motto)
@@ -340,7 +200,8 @@
             </div>
             @endif
 
-            <div class="bg-amber-50 border-t border-amber-200 px-5 py-3 flex items-center justify-between cursor-pointer transition-colors hover:bg-amber-100 skip-option-area"
+            {{-- Skip Option --}}
+            <div class="bg-amber-50 border-t border-amber-200 px-5 py-3 flex items-center justify-between cursor-pointer transition-colors hover:bg-amber-100"
                  id="skipOption{{ $position->id }}" onclick="event.stopPropagation(); toggleSkipPosition({{ $position->id }})">
                 <div class="flex items-center gap-2 text-sm">
                     <i class="bi bi-eye-slash text-amber-500"></i>
@@ -352,8 +213,8 @@
         @endforeach
 
         <div class="flex gap-3 mt-6">
-            <a href="{{ route('student.dashboard') }}" class="px-6 py-3 rounded-xl border border-slate-300 text-slate-600 font-medium hover:bg-slate-50 transition-colors no-underline text-center">Cancel</a>
-            <button type="submit" class="flex-1 bg-[#1a56db] text-white border-none rounded-xl py-3 text-base font-bold transition-all hover:bg-[#1447c0] hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed shadow-md" id="submitBtn" disabled>
+            <a href="{{ route('student.dashboard') }}" class="px-6 py-3 rounded-xl border border-slate-300 text-slate-600 font-medium hover:bg-slate-50 transition-colors no-underline">Cancel</a>
+            <button type="submit" class="flex-1 bg-[#1a56db] text-white border-none rounded-xl py-3 text-base font-bold transition-all hover:bg-[#1447c0] hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed" id="submitBtn" disabled>
                 Submit My Votes →
             </button>
         </div>
@@ -370,25 +231,22 @@
         const totalPositions = {{ $votingSession->positions->count() }};
         let selections = {};
         let skippedPositions = {};
-        let touchStartX = 0;
-        let isHorizontalIntent = false;
 
         function updateProgress() {
             const votedCount = Object.keys(selections).filter(posId => selections[posId] && selections[posId].length > 0).length;
             const skippedCount = Object.keys(skippedPositions).filter(posId => skippedPositions[posId] === true).length;
             const reviewedCount = votedCount + skippedCount;
 
-            const progressTextEl = document.getElementById('progressText');
-            const progressFillEl = document.getElementById('progressFill');
-            if (progressTextEl) progressTextEl.textContent = reviewedCount;
+            document.getElementById('progressText').textContent = reviewedCount;
             const progressPercent = totalPositions > 0 ? (reviewedCount / totalPositions) * 100 : 0;
-            if (progressFillEl) progressFillEl.style.width = progressPercent + '%';
+            document.getElementById('progressFill').style.width = progressPercent + '%';
 
             const submitBtn = document.getElementById('submitBtn');
             if (submitBtn) {
                 submitBtn.disabled = reviewedCount < totalPositions;
             }
 
+            // Update status for all positions
             @foreach($votingSession->positions as $position)
                 updatePositionStatus({{ $position->id }});
             @endforeach
@@ -404,7 +262,9 @@
             if (selections[posId] && selections[posId].length > 0) {
                 statusEl.textContent = `✓ ${selections[posId].length} selected`;
                 statusEl.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-green-100 text-green-700';
-                if (container) container.classList.remove('opacity-60');
+                if (container) {
+                    container.classList.remove('opacity-60');
+                }
                 if (counterEl) counterEl.textContent = `(${selections[posId].length} selected)`;
             } else if (skippedPositions[posId]) {
                 statusEl.textContent = '⨯ Skipped';
@@ -423,18 +283,24 @@
             const checkbox = document.getElementById(`cb-${posId}-${candidateId}`);
             const card = document.getElementById(`card-${posId}-${candidateId}`);
 
-            if (!checkbox || !card) return;
+            if (!checkbox || !card) {
+                console.error('Checkbox or card not found', posId, candidateId);
+                return;
+            }
 
             const max = parseInt(checkbox.dataset.max);
             const checked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
 
+            // If trying to check and already at max, prevent
             if (!checkbox.checked && checked.length >= max) {
                 alert(`You can only select up to ${max} candidate(s) for this position.`);
                 return;
             }
 
+            // Toggle checkbox
             checkbox.checked = !checkbox.checked;
 
+            // Update card styling
             if (checkbox.checked) {
                 card.classList.add('!border-[#1a56db]', '!shadow-[0_0_0_3px_rgba(26,86,219,0.2)]');
                 const indicator = card.querySelector('.check-indicator');
@@ -451,9 +317,11 @@
                 }
             }
 
+            // Update selections object
             const rechecked = document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]:checked`);
             if (rechecked.length > 0) {
                 selections[posId] = Array.from(rechecked).map(cb => cb.value);
+                // If we selected a candidate, remove from skipped
                 if (skippedPositions[posId]) {
                     skippedPositions[posId] = false;
                     const skipOption = document.getElementById(`skipOption${posId}`);
@@ -478,6 +346,7 @@
             if (selections[posId] && selections[posId].length > 0) {
                 if (!confirm('You have selected candidates for this position. Skipping will clear your selections. Continue?')) return;
 
+                // Clear all checkboxes for this position
                 document.querySelectorAll(`.candidate-checkbox[data-position="${posId}"]`).forEach(cb => {
                     cb.checked = false;
                     const card = document.getElementById(`card-${posId}-${cb.value}`);
@@ -494,6 +363,7 @@
             }
 
             if (skippedPositions[posId]) {
+                // Unskip
                 skippedPositions[posId] = false;
                 if (skipOption) skipOption.classList.remove('!bg-amber-100');
                 if (skipCheckbox) {
@@ -501,6 +371,7 @@
                     skipCheckbox.innerHTML = '';
                 }
             } else {
+                // Skip
                 skippedPositions[posId] = true;
                 if (skipOption) skipOption.classList.add('!bg-amber-100');
                 if (skipCheckbox) {
@@ -512,6 +383,7 @@
             updateProgress();
         };
 
+        // Initialize existing selections
         document.querySelectorAll('.candidate-checkbox:checked').forEach(checkbox => {
             const posId = checkbox.dataset.position;
             const candidateId = checkbox.value;
@@ -530,56 +402,21 @@
 
         updateProgress();
 
-        const form = document.getElementById('ballotForm');
-        if (form) {
-            form.addEventListener('submit', function(e) {
-                const reviewedCount = parseInt(document.getElementById('progressText').textContent);
+        // Form submission handler
+        document.getElementById('ballotForm')?.addEventListener('submit', function(e) {
+            const reviewedCount = parseInt(document.getElementById('progressText').textContent);
 
-                if (reviewedCount < totalPositions) {
-                    e.preventDefault();
-                    alert(`Please either vote or skip all positions before submitting.\n\nYou have reviewed ${reviewedCount} out of ${totalPositions} positions.`);
-                    return false;
-                }
+            if (reviewedCount < totalPositions) {
+                e.preventDefault();
+                alert(`Please either vote or skip all positions before submitting.\n\nYou have reviewed ${reviewedCount} out of ${totalPositions} positions.`);
+                return false;
+            }
 
-                const submitBtn = document.getElementById('submitBtn');
-                if (submitBtn) {
-                    submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span> Submitting...';
-                }
-                return true;
-            });
-        }
-
-        const scrollContainers = document.querySelectorAll('.candidates-scroll-container');
-        scrollContainers.forEach(container => {
-            let startX = 0;
-            let startScrollLeft = 0;
-            let isDragging = false;
-
-            container.addEventListener('touchstart', (e) => {
-                startX = e.touches[0].pageX;
-                startScrollLeft = container.scrollLeft;
-                isDragging = true;
-            }, { passive: true });
-
-            container.addEventListener('touchmove', (e) => {
-                if (!isDragging) return;
-                const currentX = e.touches[0].pageX;
-                const diffX = startX - currentX;
-                const newScrollLeft = startScrollLeft + diffX;
-
-                if (Math.abs(diffX) > 5) {
-                    container.scrollLeft = newScrollLeft;
-                }
-            }, { passive: true });
-
-            container.addEventListener('touchend', () => {
-                isDragging = false;
-            });
-
-            container.addEventListener('touchcancel', () => {
-                isDragging = false;
-            });
+            const submitBtn = document.getElementById('submitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span> Submitting...';
+            }
         });
     });
 </script>
