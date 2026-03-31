@@ -12,6 +12,7 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
         .candidate-card {
             animation: fadeIn 0.2s ease-out;
             cursor: pointer;
@@ -19,19 +20,17 @@
             scroll-snap-align: start;
             transition: all 0.2s ease;
             -webkit-tap-highlight-color: transparent;
-            touch-action: pan-y pinch-zoom;
         }
 
-        /* Horizontal scroll container for mobile — smooth scrolling with native momentum */
+        /* Horizontal scroll container - native smooth scrolling like vertical */
         .candidates-scroll-container {
             display: flex;
             flex-wrap: wrap;
             gap: 1.25rem;
             padding: 1.25rem;
-            touch-action: pan-y pinch-zoom;
         }
 
-        /* On mobile (<768px): force horizontal scroll, snap, smooth momentum scrolling */
+        /* On mobile: pure horizontal scroll with native momentum */
         @media (max-width: 768px) {
             .candidates-scroll-container {
                 flex-wrap: nowrap;
@@ -44,6 +43,7 @@
                 padding: 1rem 1rem 1.5rem 1rem;
                 gap: 1rem;
                 margin-bottom: 0.5rem;
+                /* Native scrolling - no custom drag handlers needed */
                 touch-action: pan-x pan-y;
             }
 
@@ -67,7 +67,6 @@
                 flex-shrink: 0;
                 scroll-snap-align: start;
                 margin-right: 0;
-                touch-action: pan-y pinch-zoom;
             }
 
             .candidate-card:active {
@@ -84,6 +83,7 @@
                 margin-bottom: 0.25rem;
                 padding-right: 0.5rem;
                 opacity: 0.7;
+                pointer-events: none;
             }
         }
 
@@ -124,29 +124,32 @@
             min-height: 13rem;
         }
 
-        /* Ensure vertical scrolling is never blocked */
+        /* Ensure perfect vertical scrolling everywhere */
         body {
             overflow-x: hidden;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
         }
 
-        /* Allow vertical scroll even when touching cards */
-        .candidate-card,
-        .skip-option-area,
-        button,
-        a {
-            touch-action: manipulation;
-        }
-
-        /* Prevent any element from blocking vertical scroll */
+        /* Allow natural scrolling on all elements */
         * {
             -webkit-overflow-scrolling: touch;
         }
 
-        /* Make scroll containers work properly */
+        /* Cards don't block vertical scroll */
+        .candidate-card {
+            touch-action: manipulation;
+        }
+
+        /* Scroll container gets native horizontal scroll */
         .candidates-scroll-container {
             -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+        }
+
+        /* Prevent any custom drag from interfering */
+        .candidates-scroll-container:active {
+            cursor: default;
         }
     </style>
 </head>
@@ -192,7 +195,7 @@
 
     <div class="bg-[#e0e7ff] rounded-lg px-4 py-3 mb-4 text-sm text-[#1e40af] flex items-center gap-2 flex-wrap">
         <i class="bi bi-info-circle-fill"></i>
-        <span>Tap on any candidate card to vote. On mobile, swipe left/right to browse candidates.</span>
+        <span>Tap on any candidate card to vote. On mobile, scroll horizontally to browse candidates — just like scrolling vertically.</span>
         <i class="bi bi-arrow-left-right ml-auto text-blue-600 hidden md:inline"></i>
     </div>
 
@@ -241,7 +244,7 @@
             @endphp
             @if($candidateCount > 0)
                 <div class="scroll-hint md:hidden text-right pr-4 pt-2 text-[11px] text-blue-600 flex justify-end items-center gap-1">
-                    <i class="bi bi-chevron-left"></i> swipe horizontally to browse <i class="bi bi-chevron-right"></i>
+                    {{-- <i class="bi bi-chevron-left"></i> scroll horizontally → <i class="bi bi-chevron-right"></i> --}}
                 </div>
             @endif
 
@@ -368,8 +371,7 @@
         let selections = {};
         let skippedPositions = {};
         let touchStartX = 0;
-        let touchStartY = 0;
-        let isHorizontalScroll = false;
+        let isHorizontalIntent = false;
 
         function updateProgress() {
             const votedCount = Object.keys(selections).filter(posId => selections[posId] && selections[posId].length > 0).length;
@@ -549,7 +551,6 @@
         }
 
         const scrollContainers = document.querySelectorAll('.candidates-scroll-container');
-
         scrollContainers.forEach(container => {
             let startX = 0;
             let startScrollLeft = 0;
@@ -569,9 +570,8 @@
 
                 if (Math.abs(diffX) > 5) {
                     container.scrollLeft = newScrollLeft;
-                    e.preventDefault();
                 }
-            }, { passive: false });
+            }, { passive: true });
 
             container.addEventListener('touchend', () => {
                 isDragging = false;
@@ -579,32 +579,6 @@
 
             container.addEventListener('touchcancel', () => {
                 isDragging = false;
-            });
-        });
-
-        const candidateCards = document.querySelectorAll('.candidate-card');
-        candidateCards.forEach(card => {
-            card.addEventListener('touchstart', (e) => {
-                touchStartX = e.touches[0].clientX;
-                touchStartY = e.touches[0].clientY;
-                isHorizontalScroll = false;
-            });
-
-            card.addEventListener('touchmove', (e) => {
-                const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
-                const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
-
-                if (deltaX > deltaY && deltaX > 8) {
-                    isHorizontalScroll = true;
-                    e.preventDefault();
-                }
-            });
-
-            card.addEventListener('click', (e) => {
-                if (isHorizontalScroll) {
-                    e.stopPropagation();
-                    return;
-                }
             });
         });
     });
