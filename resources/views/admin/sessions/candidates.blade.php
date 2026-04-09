@@ -93,20 +93,46 @@
             {{-- Add candidate form --}}
             <div class="card-body pt-0">
                 <form method="POST" action="{{ route('admin.positions.candidates.add', $position) }}"
-                      enctype="multipart/form-data">
+                      enctype="multipart/form-data" class="candidate-form">
                     @csrf
+
+                    {{-- Hidden field that holds the selected student_id on submit --}}
+                    <input type="hidden" name="student_id" class="student-id-input">
+
                     <div class="row g-2 align-items-end">
+
+                        {{-- Searchable student picker --}}
                         <div class="col-md-5">
                             <label class="form-label small fw-semibold">Select Student</label>
-                            <select name="student_id" class="form-select form-select-sm" required>
-                                <option value="">— Search student —</option>
-                                @foreach($students as $student)
-                                    <option value="{{ $student->id }}">
-                                        {{ $student->full_name }} ({{ $student->student_id }})
-                                    </option>
-                                @endforeach
-                            </select>
+                            <div class="student-picker position-relative">
+                                <input
+                                    type="text"
+                                    class="form-control form-control-sm student-search"
+                                    placeholder="Type name or ID…"
+                                    autocomplete="off"
+                                >
+                                <div class="student-dropdown border rounded bg-white shadow-sm"
+                                     style="display:none; position:absolute; z-index:1050;
+                                            width:100%; max-height:200px; overflow-y:auto;
+                                            top:calc(100% + 2px); left:0;">
+                                    @foreach($students as $student)
+                                    <div class="student-option px-3 py-2"
+                                         style="cursor:pointer; font-size:0.85rem; line-height:1.3;"
+                                         data-id="{{ $student->id }}"
+                                         data-label="{{ $student->full_name }} ({{ $student->student_id }})">
+                                        <span class="fw-medium">{{ $student->full_name }}</span>
+                                        <span class="text-muted ms-1 small">{{ $student->student_id }}</span>
+                                        @if($student->section ?? null)
+                                            <span class="text-muted small"> · {{ $student->section }}</span>
+                                        @endif
+                                    </div>
+                                    @endforeach
+                                    <div class="student-no-results px-3 py-2 text-muted small"
+                                         style="display:none;">No students found.</div>
+                                </div>
+                            </div>
                         </div>
+
                         <div class="col-md-3">
                             <label class="form-label small fw-semibold">Photo</label>
                             <input type="file" name="photo" class="form-control form-control-sm"
@@ -145,14 +171,71 @@
 
 @push('scripts')
 <script>
-    // Make student dropdowns searchable
-    document.querySelectorAll('select[name="student_id"]').forEach(sel => {
-        sel.addEventListener('keydown', e => {
-            const q = e.key.toLowerCase();
-            Array.from(sel.options).forEach(opt => {
-                opt.style.display = opt.text.toLowerCase().includes(q) ? '' : 'none';
-            });
-        });
+document.querySelectorAll('.student-picker').forEach(picker => {
+    const searchInput  = picker.querySelector('.student-search');
+    const dropdown     = picker.querySelector('.student-dropdown');
+    const options      = picker.querySelectorAll('.student-option');
+    const noResults    = picker.querySelector('.student-no-results');
+    const hiddenInput  = picker.closest('form').querySelector('.student-id-input');
+
+    // Show dropdown when the text input is focused
+    searchInput.addEventListener('focus', () => {
+        filterOptions('');
+        dropdown.style.display = 'block';
     });
+
+    // Live-filter as user types
+    searchInput.addEventListener('input', () => {
+        // Clear any previously selected student when the user types again
+        hiddenInput.value = '';
+        searchInput.classList.remove('is-valid');
+        filterOptions(searchInput.value.trim());
+        dropdown.style.display = 'block';
+    });
+
+    // Select a student on click
+    options.forEach(opt => {
+        opt.addEventListener('mousedown', e => {
+            e.preventDefault(); // keep focus on input
+            selectStudent(opt);
+        });
+        // Hover highlight
+        opt.addEventListener('mouseenter', () => opt.style.background = '#f0f0f0');
+        opt.addEventListener('mouseleave', () => opt.style.background = '');
+    });
+
+    // Close dropdown when clicking anywhere else
+    document.addEventListener('click', e => {
+        if (!picker.contains(e.target)) dropdown.style.display = 'none';
+    });
+
+    // Guard: prevent submit without a selection
+    picker.closest('form').addEventListener('submit', e => {
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.focus();
+            searchInput.classList.add('is-invalid');
+        }
+    });
+
+    function filterOptions(query) {
+        const q = query.toLowerCase();
+        let visible = 0;
+        options.forEach(opt => {
+            const matches = opt.dataset.label.toLowerCase().includes(q);
+            opt.style.display = matches ? '' : 'none';
+            if (matches) visible++;
+        });
+        noResults.style.display = visible === 0 ? '' : 'none';
+    }
+
+    function selectStudent(opt) {
+        hiddenInput.value      = opt.dataset.id;
+        searchInput.value      = opt.dataset.label;
+        searchInput.classList.remove('is-invalid');
+        searchInput.classList.add('is-valid');
+        dropdown.style.display = 'none';
+    }
+});
 </script>
 @endpush
