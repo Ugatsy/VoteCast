@@ -57,40 +57,56 @@ class Candidate extends Model
     }
 
     /**
-     * Get formatted photo URL
-     * Priority: 1. Candidate's uploaded photo, 2. Student's profile photo, 3. Default avatar
+     * Get photo URL for card/ballot display.
+     *
+     * Priority:
+     *  1. Candidate-specific photo (admin-uploaded)
+     *  2. Student profile photo (uploaded by student via profile page)
+     *  3. Generated initials avatar
+     *
+     * Cloudinary URLs are built from photo_public_id so transforms sit in
+     * the URL path — Cloudinary ignores query-string params like ?w=200.
      */
-/**
- * Get formatted photo URL for card display (200x200 optimized)
- */
-public function getPhotoUrlAttribute(): string
-{
-    // First, check if candidate has a specific photo uploaded
-    if ($this->photo) {
-        if (filter_var($this->photo, FILTER_VALIDATE_URL)) {
-            // If it's a Cloudinary URL, add transformations for card size
-            if (strpos($this->photo, 'cloudinary') !== false) {
-                return $this->photo . '?w=200&h=200&c=fill&g=face';
+    public function getPhotoUrlAttribute(): string
+    {
+        // 1. Candidate has their own photo (admin-uploaded)
+        if ($this->photo) {
+            if (filter_var($this->photo, FILTER_VALIDATE_URL)) {
+                return $this->photo; // already a full URL
             }
-            return $this->photo;
+            return asset('storage/' . $this->photo); // local storage path
         }
-        return asset('storage/' . $this->photo);
+
+        // 2. Fall back to student's profile photo
+        if ($this->student && $this->student->photo_public_id) {
+            // Build URL from public_id — avoids the stored URL's version segment
+            // (/vXXXXXX/) which breaks path-injection-based transform approaches.
+            return $this->buildCloudinaryUrl($this->student->photo_public_id, 200);
+        }
+
+        if ($this->student && $this->student->photo) {
+            // Legacy / non-Cloudinary fallback: just use the stored URL directly
+            return $this->student->photo;
+        }
+
+        // 3. Generated initials avatar
+        $name     = $this->student ? $this->student->full_name : 'Candidate';
+        $initials = $this->getInitials($name);
+        return "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&background=1a56db&color=fff&size=200";
     }
 
-    // Second, check if the student has a profile photo
-    if ($this->student && $this->student->photo) {
-        $photoUrl = $this->student->photo;
-        if (strpos($photoUrl, 'cloudinary') !== false) {
-            return $photoUrl . '?w=200&h=200&c=fill&g=face';
-        }
-        return $photoUrl;
+    /**
+     * Build a Cloudinary delivery URL with face-crop transforms in the path.
+     * Format: /image/upload/{transforms}/{public_id}
+     * Version number and file extension are optional — Cloudinary handles both.
+     */
+    private function buildCloudinaryUrl(string $publicId, int $size): string
+    {
+        $cloudName = config('cloudinary.cloud_name');
+        $transform = "c_fill,g_face,h_{$size},q_auto,f_auto,w_{$size}";
+        return "https://res.cloudinary.com/{$cloudName}/image/upload/{$transform}/{$publicId}";
     }
 
-    // Third, generate default avatar from student's name
-    $name = $this->student ? $this->student->full_name : 'Candidate';
-    $initials = $this->getInitials($name);
-    return "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&background=1a56db&color=fff&size=200";
-}
 
     private function getInitials(string $name): string
     {

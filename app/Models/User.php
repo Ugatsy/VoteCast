@@ -123,14 +123,35 @@ class User extends Authenticatable
     }
 
     /**
-     * Get user's profile photo URL
+     * Get user's profile photo URL.
+     *
+     * Builds a proper Cloudinary URL from photo_public_id when available,
+     * so transforms are in the URL path (Cloudinary ignores query params).
      */
     public function getProfilePhotoUrlAttribute(): string
     {
+        if ($this->photo_public_id) {
+            return $this->buildCloudinaryUrl($this->photo_public_id, 200);
+        }
         if ($this->photo) {
             return $this->photo;
         }
-        return "https://ui-avatars.com/api/?name=" . urlencode($this->initials) . "&background=1a56db&color=fff&size=40";
+        return "https://ui-avatars.com/api/?name=" . urlencode($this->initials) . "&background=1a56db&color=fff&size=200";
+    }
+
+    /**
+     * Build a Cloudinary delivery URL with face-crop transforms in the path.
+     * Format: /image/upload/{transforms}/{public_id}
+     *
+     * Using photo_public_id directly (not the stored photo URL) avoids the
+     * version segment (/vXXXXXX/) in the stored URL that causes path-injection
+     * to silently fail.
+     */
+    public function buildCloudinaryUrl(string $publicId, int $size): string
+    {
+        $cloudName = config('cloudinary.cloud_name');
+        $transform = "c_fill,g_face,h_{$size},q_auto,f_auto,w_{$size}";
+        return "https://res.cloudinary.com/{$cloudName}/image/upload/{$transform}/{$publicId}";
     }
 
     /**
