@@ -146,7 +146,7 @@
     <div class="brand">Vote<span>Cast</span></div>
     <div class="d-flex gap-3 align-items-center">
         <button class="btn-qr-scanner" data-bs-toggle="modal" data-bs-target="#qrScannerModal">
-            <i class="bi bi-qr-code-scan"></i> Scan QR Code
+            <i class="bi bi-qr-code-scan"></i>
         </button>
         <a href="{{ route('profile.index') }}" class="text-white text-decoration-none d-flex align-items-center gap-2" style="opacity:0.92">
             <img src="{{ $user->profile_photo_url }}" alt="{{ $user->full_name }}"
