@@ -54,7 +54,6 @@
             </div>
         </form>
     </div>
-</div>
 
 {{-- Upload Form --}}
 <div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
@@ -65,20 +64,7 @@
         <form method="POST" action="{{ route('admin.enrollment.upload') }}"
               enctype="multipart/form-data" class="row g-3 align-items-end">
             @csrf
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold">Semester</label>
-                <select name="semester" class="form-select" required>
-                    <option value="1st Semester" @selected($currentSemester === '1st Semester')>1st Semester</option>
-                    <option value="2nd Semester" @selected($currentSemester === '2nd Semester')>2nd Semester</option>
-                    <option value="Summer"       @selected($currentSemester === 'Summer')>Summer</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold">Academic Year</label>
-                <input type="text" name="academic_year" class="form-control"
-                       value="{{ $currentAcademicYear }}" required>
-            </div>
-            <div class="col-md-4">
+            <div class="col-md-10">
                 <label class="form-label small fw-semibold">Excel File (.xlsx)</label>
                 <input type="file" name="excel_file" class="form-control"
                        accept=".xlsx,.xls" required>
@@ -92,11 +78,10 @@
         <div class="mt-3 p-3 bg-light rounded small text-muted">
             <i class="bi bi-info-circle me-1"></i>
             <strong>Expected format:</strong>
-            Row 1–2 = School info · Row 4 = "Enrollment List" · Row 5 = Period · Row 6 = Course · Row 8 = Column headers ·
+            Row 1–2 = School info · Row 4 = "Enrollment List" · <strong>Row 5 = Period</strong> (e.g. "1st Semester 2025-2026") · Row 6 = Course · Row 8 = Column headers ·
             <strong>Row 9+ = Student data</strong> (No, Code, Last Name, First Name, Middle Name, Sex, Course, Year, Units, Section)
         </div>
     </div>
-</div>
 
 {{-- Upload History --}}
 <div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
@@ -112,15 +97,23 @@
                     <th>Imported</th>
                     <th>Skipped</th>
                     <th>Uploaded By</th>
+                    <th>Courses</th>
                     <th>Date</th>
                     <th>Status</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
             @forelse($batches as $batch)
-            <tr>
+            @php
+                $isActiveBatch = ($batch->semester === $currentSemester && $batch->academic_year === $currentAcademicYear && $batch->imported_records > 0);
+            @endphp
+            <tr class="{{ $isActiveBatch ? 'table-primary' : '' }}">
                 <td class="small text-truncate" style="max-width:200px">
                     <i class="bi bi-file-earmark-excel text-success me-1"></i>{{ $batch->filename }}
+                    @if($isActiveBatch)
+                        <span class="badge bg-primary ms-1">Active</span>
+                    @endif
                 </td>
                 <td class="small">{{ $batch->semester }} {{ $batch->academic_year }}</td>
                 <td><span class="badge bg-success">{{ $batch->imported_records }} imported</span></td>
@@ -132,9 +125,17 @@
                     @endif
                 </td>
                 <td class="small">{{ $batch->uploader->full_name ?? '—' }}</td>
+                <td class="small">
+                    @if($batch->courses && count($batch->courses) > 0)
+                        @foreach($batch->courses as $course)
+                            <span class="badge bg-info text-dark me-1">{{ $course }}</span>
+                        @endforeach
+                    @else
+                        <span class="text-muted">—</span>
+                    @endif
+                </td>
                 <td class="small text-muted">{{ $batch->created_at->format('M d, Y H:i') }}</td>
                 <td>
-                    {{-- FIX: Show a clear "Duplicate" badge when nothing was imported --}}
                     @if($batch->imported_records === 0 && $batch->skipped_records > 0)
                         <span class="badge bg-secondary" title="All records were already enrolled">
                             <i class="bi bi-arrow-repeat me-1"></i>Duplicate
@@ -147,16 +148,33 @@
                         <span class="badge bg-light text-muted border">Empty</span>
                     @endif
                 </td>
+                <td>
+                    @if($batch->imported_records > 0)
+                    <div class="btn-group btn-group-sm">
+                        <a href="{{ route('admin.enrollment.batches.show', $batch) }}" class="btn btn-outline-primary" title="View">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        <form method="POST" action="{{ route('admin.enrollment.batches.destroy', $batch) }}" onsubmit="return confirm('Are you sure you want to delete this batch? All {{ $batch->imported_records }} enrollments will be removed.')" class="d-inline">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-outline-danger" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                    @else
+                        <span class="text-muted small">—</span>
+                    @endif
+                </td>
             </tr>
             @empty
             <tr>
-                <td colspan="7" class="text-center text-muted py-4">No uploads yet.</td>
+                <td colspan="9" class="text-center text-muted py-4">No uploads yet.</td>
             </tr>
             @endforelse
             </tbody>
         </table>
     </div>
-</div>
 
 {{-- Current Enrollment List --}}
 <div class="card border-0 shadow-sm" style="border-radius:10px">

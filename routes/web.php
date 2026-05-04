@@ -83,6 +83,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/', [Admin\EnrollmentController::class, 'index'])->name('index');
             Route::post('/upload', [Admin\EnrollmentController::class, 'upload'])->name('upload');
             Route::post('/semester', [Admin\EnrollmentController::class, 'setSemester'])->name('semester');
+            Route::get('/batches/{batch}', [Admin\EnrollmentController::class, 'show'])->name('batches.show');
+            Route::delete('/batches/{batch}', [Admin\EnrollmentController::class, 'destroy'])->name('batches.destroy');
         });
 
         // ── Voting Sessions Management ─────────────────────────────────────────
