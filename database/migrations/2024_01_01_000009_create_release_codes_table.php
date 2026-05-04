@@ -1,14 +1,16 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void
+return new class extends Migration
+{
+    public function up()
     {
         Schema::create('release_codes', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('voting_session_id')->constrained('voting_sessions')->cascadeOnDelete();
+            $table->foreignId('voting_session_id')->constrained()->onDelete('cascade');
             $table->string('code', 50);
             $table->string('description')->nullable();
             $table->boolean('is_active')->default(true);
@@ -16,10 +18,11 @@ return new class extends Migration {
             $table->timestamps();
 
             $table->unique(['voting_session_id', 'code']);
+            $table->index('code');
         });
     }
 
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('release_codes');
     }

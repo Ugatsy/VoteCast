@@ -24,7 +24,7 @@ class Semester extends Model
         'end_date' => 'date',
         'is_active' => 'boolean',
     ];
-    
+
     /**
      * Get the current active semester
      */
@@ -32,7 +32,7 @@ class Semester extends Model
     {
         return static::where('is_active', true)->first();
     }
-    
+
     /**
      * Check if a student is enrolled in this semester
      */
@@ -43,7 +43,7 @@ class Semester extends Model
             ->where('student_code', $studentCode)
             ->exists();
     }
-    
+
     /**
      * Get all enrollments for this semester
      */

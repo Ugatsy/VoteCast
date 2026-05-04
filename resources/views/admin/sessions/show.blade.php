@@ -33,6 +33,11 @@
                     <i class="bi bi-person-check me-1"></i>Manual Voter List
                 </span>
             @endif
+            @if($votingSession->requires_release_code)
+                &nbsp;·&nbsp; <span class="badge bg-warning text-dark border" style="font-size:0.8rem">
+                    <i class="bi bi-qr-code me-1"></i>Release Code Required
+                </span>
+            @endif
         </p>
     </div>
     <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -104,6 +109,41 @@
            class="btn btn-primary btn-sm">
             <i class="bi bi-file-earmark-word me-1"></i>Download DOCX
         </a>
+    </div>
+</div>
+@endif
+
+{{-- Display Release Codes if enabled --}}
+@if($votingSession->requires_release_code && $votingSession->releaseCodes->count())
+<div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
+    <div class="card-header bg-white py-3">
+        <strong><i class="bi bi-qr-code me-2 text-primary"></i>Active Release Codes</strong>
+        <span class="badge bg-primary ms-2">{{ $votingSession->releaseCodes->count() }} codes</span>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info small mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Students must enter one of these codes to access the voting ballot.
+        </div>
+        <div class="row g-2">
+            @foreach($votingSession->releaseCodes as $code)
+            <div class="col-md-3">
+                <div class="border rounded p-3 text-center bg-light">
+                    <code class="fw-bold fs-5">{{ $code->code }}</code>
+                    @if($code->expires_at)
+                        <div class="small text-muted mt-1">
+                            <i class="bi bi-clock"></i> Expires: {{ $code->expires_at->format('M d, Y') }}
+                        </div>
+                    @else
+                        <div class="small text-muted mt-1">No expiry</div>
+                    @endif
+                    <div class="small text-success mt-1">
+                        <i class="bi bi-check-circle"></i> Active
+                    </div>
+                </div>
+            </div>
+            @endforeach
+        </div>
     </div>
 </div>
 @endif

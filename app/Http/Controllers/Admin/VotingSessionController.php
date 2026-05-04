@@ -6,6 +6,8 @@ use App\Models\Candidate;
 use App\Models\Enrollment;
 use App\Models\Participation;
 use App\Models\Position;
+use App\Models\ReleaseCode;
+use App\Models\Semester;
 use App\Models\User;
 use App\Models\Vote;
 use App\Models\VotingSession;
@@ -24,41 +26,98 @@ class VotingSessionController extends Controller
 
     public function create()
     {
-        $courses  = Enrollment::current()->select('course')->distinct()->orderBy('course')->pluck('course');
-        $sections = Enrollment::current()->select('section')->distinct()->orderBy('section')->pluck('section');
-        $students = User::students()->active()->orderBy('full_name')->get();
+        // Get active semester from database
+        $activeSemester = Semester::getCurrent();
 
-        return view('admin.sessions.create', compact('courses', 'sections', 'students'));
+        if (!$activeSemester) {
+            return redirect()->route('admin.enrollment.index')
+                ->with('error', 'Please set an active semester before creating an election.');
+        }
+
+        // Filter courses and sections by active semester
+        $courses = Enrollment::where('semester', $activeSemester->name)
+            ->where('academic_year', $activeSemester->academic_year)
+            ->where('is_active', true)
+            ->select('course')
+            ->distinct()
+            ->orderBy('course')
+            ->pluck('course');
+
+        $sections = Enrollment::where('semester', $activeSemester->name)
+            ->where('academic_year', $activeSemester->academic_year)
+            ->where('is_active', true)
+            ->select('section')
+            ->distinct()
+            ->orderBy('section')
+            ->pluck('section');
+
+        $students = User::students()
+            ->active()
+            ->where('semester', $activeSemester->name)
+            ->where('academic_year', $activeSemester->academic_year)
+            ->orderBy('full_name')
+            ->get();
+
+        return view('admin.sessions.create', compact('courses', 'sections', 'students', 'activeSemester'));
     }
 
     public function store(Request $request)
-    {
-        $request->validate([
-            'title'       => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'category'    => 'required|in:department,course,section,manual',
-            'start_date'  => 'required|date',
-            'end_date'    => 'required|date|after:start_date',
-        ]);
+{
+    $request->validate([
+        'title'       => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'category'    => 'required|in:department,course,section,manual',
+        'start_date'  => 'required|date',
+        'end_date'    => 'required|date|after:start_date',
+        'release_codes' => 'required_if:requires_release_code,1|array|min:1',
+        'release_codes.*' => 'required|string|max:50|distinct',
+    ]);
 
-        $session = VotingSession::create([
-            'title'                 => $request->title,
-            'description'           => $request->description,
-            'category'              => $request->category,
-            'target_course'         => $request->target_course,
-            'target_department'     => $request->target_department,
-            'target_section'        => $request->target_section,
-            'status'                => 'scheduled',
-            'start_date'            => $request->start_date,
-            'end_date'              => $request->end_date,
-            'allow_vote_changes'    => $request->boolean('allow_vote_changes'),
-            'requires_release_code' => $request->boolean('requires_release_code'),
-            'created_by'            => auth()->id(),
-        ]);
+    // Get active semester
+    $activeSemester = Semester::getCurrent();
 
-        return redirect()->route('admin.sessions.candidates', $session)
-            ->with('success', 'Election created! Now add positions and candidates.');
+    if (!$activeSemester) {
+        return back()->withErrors(['error' => 'No active semester set. Please set an active semester first.']);
     }
+
+    $session = VotingSession::create([
+        'title'                 => $request->title,
+        'description'           => $request->description,
+        'category'              => $request->category,
+        'target_course'         => $request->target_course,
+        'target_department'     => $request->target_department,
+        'target_section'        => $request->target_section,
+        'status'                => 'scheduled',
+        'start_date'            => $request->start_date,
+        'end_date'              => $request->end_date,
+        'allow_vote_changes'    => $request->boolean('allow_vote_changes'),
+        'requires_release_code' => $request->boolean('requires_release_code'),
+        'created_by'            => auth()->id(),
+        'semester'              => $activeSemester->name,
+        'academic_year'         => $activeSemester->academic_year,
+    ]);
+
+    // Create release codes if required - expiry syncs with election end date
+    if ($request->boolean('requires_release_code') && $request->has('release_codes')) {
+        // Set expiry to the election end date
+        $expiresAt = $request->end_date;
+
+        foreach ($request->release_codes as $code) {
+            if (!empty($code)) {
+                ReleaseCode::create([
+                    'voting_session_id' => $session->id,
+                    'code' => strtoupper(trim($code)),
+                    'description' => 'Code created during election setup',
+                    'expires_at' => $expiresAt,  // ← Sync with election end date
+                    'is_active' => true,
+                ]);
+            }
+        }
+    }
+
+    return redirect()->route('admin.sessions.candidates', $session)
+        ->with('success', 'Election created! Now add positions and candidates.');
+}
 
     public function show(VotingSession $votingSession)
     {
@@ -67,7 +126,8 @@ class VotingSessionController extends Controller
                 $query->withCount('votes')->orderBy('votes_count', 'desc');
             },
             'positions.candidates.student',
-            'creator'
+            'creator',
+            'releaseCodes',
         ]);
 
         $totalVoters = $votingSession->total_voters;
@@ -91,8 +151,19 @@ class VotingSessionController extends Controller
     {
         $votingSession->load('positions.candidates.student');
 
-        // Filter students based on session category
-        $studentsQuery = User::students()->active()->orderBy('full_name');
+        // Get active semester from database
+        $activeSemester = Semester::getCurrent();
+
+        if (!$activeSemester) {
+            return back()->withErrors(['error' => 'No active semester set. Please set an active semester first.']);
+        }
+
+        // Filter students based on active semester AND session category
+        $studentsQuery = User::students()
+            ->active()
+            ->where('semester', $activeSemester->name)
+            ->where('academic_year', $activeSemester->academic_year)
+            ->orderBy('full_name');
 
         if ($votingSession->category === 'course' && $votingSession->target_course) {
             $studentsQuery->where('department', $votingSession->target_course);
@@ -104,7 +175,7 @@ class VotingSessionController extends Controller
 
         $students = $studentsQuery->get();
 
-        return view('admin.sessions.candidates', compact('votingSession', 'students'));
+        return view('admin.sessions.candidates', compact('votingSession', 'students', 'activeSemester'));
     }
 
     public function addPosition(Request $request, VotingSession $votingSession)
@@ -134,6 +205,19 @@ class VotingSessionController extends Controller
             'manifesto'  => 'nullable|string|max:1000',
             'photo'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
+
+        // Check if student is in the active semester
+        $activeSemester = Semester::getCurrent();
+        $student = User::find($request->student_id);
+
+        if (!$activeSemester || !$student) {
+            return back()->withErrors(['student_id' => 'Invalid student or no active semester.']);
+        }
+
+        if ($student->semester !== $activeSemester->name ||
+            $student->academic_year !== $activeSemester->academic_year) {
+            return back()->withErrors(['student_id' => 'This student is not enrolled in the active semester.']);
+        }
 
         if ($position->candidates()->where('student_id', $request->student_id)->exists()) {
             return back()->withErrors(['student_id' => 'This student is already a candidate for this position.']);

@@ -3,277 +3,243 @@ namespace App\Http\Controllers\Student;
 
 use App\Http\Controllers\Controller;
 use App\Models\Participation;
+use App\Models\ReleaseCode;
 use App\Models\Vote;
 use App\Models\VotingSession;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
 class VotingBallotController extends Controller
 {
+    /**
+     * Show the voting ballot
+     */
     public function show(VotingSession $votingSession)
-    {
-        $user = auth()->user();
-
-        Log::info('Ballot access attempt', [
-            'session_id' => $votingSession->id,
-            'session_title' => $votingSession->title,
-            'user_id' => $user->id,
-        ]);
-
-        if (!$votingSession->isActive()) {
-            return redirect()->route('student.dashboard')
-                ->with('error', 'This election is not currently active.');
-        }
-
-        if (!$votingSession->isEligible($user)) {
-            abort(403, 'You are not eligible to vote in this election.');
-        }
-
-        $hasParticipated = Participation::where('voting_session_id', $votingSession->id)
-            ->where('user_id', $user->id)
-            ->exists();
-
-        if ($hasParticipated && !$votingSession->allow_vote_changes) {
-            return redirect()->route('student.dashboard')
-                ->with('info', 'You have already cast your vote in this election.');
-        }
-
-        $existingVotes = Vote::where('voter_id', $user->id)
-            ->where('voting_session_id', $votingSession->id)
-            ->get();
-
-        $alreadyVoted = $existingVotes->isNotEmpty();
-
-        if ($alreadyVoted && $votingSession->allow_vote_changes) {
-            DB::transaction(function() use ($user, $votingSession) {
-                Vote::where('voter_id', $user->id)
-                    ->where('voting_session_id', $votingSession->id)
-                    ->delete();
-                Participation::where('voting_session_id', $votingSession->id)
-                    ->where('user_id', $user->id)
-                    ->delete();
-            });
-            $alreadyVoted = false;
-        }
-
-        $votingSession->load('positions.candidates.student');
-
-        return view('student.ballot', compact('votingSession', 'alreadyVoted'));
+{
+    // Check if user is eligible
+    if (!$votingSession->canVote(auth()->user())) {
+        return redirect()->route('student.dashboard')
+            ->with('error', 'You are not eligible to vote in this election.');
     }
 
+    // Check if user already voted
+    $alreadyVoted = auth()->user()->hasVotedInSession($votingSession->id);
+
+    if ($alreadyVoted && !$votingSession->allow_vote_changes) {
+        return redirect()->route('student.dashboard')
+            ->with('error', 'You have already voted in this election and vote changes are not allowed.');
+    }
+
+    $votingSession->load('positions.candidates.student');
+
+    // Pass showsCodeModal flag to view
+    $showCodeModal = $votingSession->requires_release_code && !session("release_code_validated_{$votingSession->id}");
+
+    return view('student.ballot', compact('votingSession', 'alreadyVoted', 'showCodeModal'));
+}
+
+    /**
+     * Validate release code before showing ballot
+     */
+   public function validateReleaseCode(Request $request, VotingSession $votingSession)
+{
+    $request->validate([
+        'release_code' => 'required|string|max:50',
+    ]);
+
+    if (!$votingSession->requires_release_code) {
+        return response()->json(['success' => true, 'redirect' => route('student.ballot', $votingSession)]);
+    }
+
+    if ($votingSession->validateReleaseCode($request->release_code)) {
+        session(["release_code_validated_{$votingSession->id}" => true]);
+        return response()->json(['success' => true, 'redirect' => route('student.ballot', $votingSession)]);
+    }
+
+    return response()->json(['success' => false, 'message' => 'Invalid or expired release code. Please check and try again.'], 422);
+}
+
+    /**
+     * Submit votes
+     */
     public function submit(Request $request, VotingSession $votingSession)
     {
-        $user = auth()->user();
+        // Check if user is eligible
+        if (!$votingSession->canVote(auth()->user())) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'You are not eligible to vote in this election.');
+        }
+
+        // Check if user already voted
+        $alreadyVoted = auth()->user()->hasVotedInSession($votingSession->id);
+
+        if ($alreadyVoted && !$votingSession->allow_vote_changes) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'You have already voted in this election and vote changes are not allowed.');
+        }
+
+        // Validate release code if required
+        if ($votingSession->requires_release_code) {
+            if (!session("release_code_validated_{$votingSession->id}")) {
+                return redirect()->route('student.ballot', $votingSession)
+                    ->with('error', 'Release code validation required.');
+            }
+        }
+
+        $request->validate([
+            'votes' => 'nullable|array',
+            'votes.*' => 'nullable|array',
+            'votes.*.*' => 'exists:candidates,id',
+        ]);
+
+        $votes = $request->input('votes', []);
 
         DB::beginTransaction();
 
         try {
-            Log::info('Starting vote submission', [
-                'session_id' => $votingSession->id,
-                'user_id' => $user->id,
-                'allow_vote_changes' => $votingSession->allow_vote_changes
-            ]);
-
-            if (!$votingSession->isActive()) {
-                throw new \Exception('This election is no longer active.');
-            }
-
-            if (!$votingSession->isEligible($user)) {
-                throw new \Exception('You are not eligible to vote in this election.');
-            }
-
-            $existingParticipation = Participation::where('voting_session_id', $votingSession->id)
-                ->where('user_id', $user->id)
-                ->lockForUpdate()
-                ->first();
-
-            $hasExistingParticipation = $existingParticipation !== null;
-
-            if (!$votingSession->allow_vote_changes && $hasExistingParticipation) {
-                throw new \Exception('You have already voted in this election and vote changes are not allowed.');
-            }
-
-            if ($votingSession->requires_release_code) {
-                $code = $votingSession->releaseCodes()
-                    ->where('code', $request->release_code)
-                    ->active()
-                    ->first();
-
-                if (!$code) {
-                    throw new \Exception('Invalid or expired release code.');
-                }
-            }
-
-            $positions = $votingSession->positions;
-
-            if ($positions->isEmpty()) {
-                throw new \Exception('This election has no positions configured.');
-            }
-
-            $submittedVotes = $request->input('votes', []);
-
-            foreach ($positions as $position) {
-                if (isset($submittedVotes[$position->id])) {
-                    $candidateIds = is_array($submittedVotes[$position->id])
-                        ? $submittedVotes[$position->id]
-                        : [$submittedVotes[$position->id]];
-
-                    if (count($candidateIds) > $position->max_winners) {
-                        throw new \Exception("You cannot select more than {$position->max_winners} candidates for {$position->title}");
-                    }
-
-                    foreach ($candidateIds as $candidateId) {
-                        $candidate = $position->candidates()->find($candidateId);
-                        if (!$candidate) {
-                            throw new \Exception("Invalid candidate selected for position: {$position->title}");
-                        }
-                    }
-                }
-            }
-
-            $receiptId = strtoupper(Str::random(8)) . '-' . time();
-
-            if ($votingSession->allow_vote_changes && $hasExistingParticipation) {
-                Vote::where('voter_id', $user->id)
-                    ->where('voting_session_id', $votingSession->id)
+            // If vote changes are allowed, remove previous votes
+            if ($alreadyVoted && $votingSession->allow_vote_changes) {
+                Vote::where('voting_session_id', $votingSession->id)
+                    ->where('voter_id', auth()->id())
                     ->delete();
-                $existingParticipation->delete();
+
+                Participation::where('voting_session_id', $votingSession->id)
+                    ->where('user_id', auth()->id())
+                    ->delete();
             }
 
-            $votesSaved = 0;
-            $hasAnyVotes = false;
+            // Check if user is submitting any votes
+            $hasVotes = false;
+            $receiptId = uniqid('VOTE_', true);
 
-            foreach ($positions as $position) {
-                if (!isset($submittedVotes[$position->id])) {
-                    continue;
-                }
+            foreach ($votes as $positionId => $candidateIds) {
+                if (empty($candidateIds)) continue;
 
-                $hasAnyVotes = true;
-                $candidateIds = is_array($submittedVotes[$position->id])
-                    ? $submittedVotes[$position->id]
-                    : [$submittedVotes[$position->id]];
+                $position = $votingSession->positions()->find($positionId);
+                if (!$position) continue;
 
-                foreach ($candidateIds as $index => $candidateId) {
+                // Ensure not exceeding max winners
+                $candidateIds = array_slice($candidateIds, 0, $position->max_winners);
+
+                foreach ($candidateIds as $candidateId) {
                     Vote::create([
                         'voting_session_id' => $votingSession->id,
-                        'position_id' => $position->id,
+                        'position_id' => $positionId,
                         'candidate_id' => $candidateId,
-                        'voter_id' => $user->id,
-                        'receipt_id' => $receiptId . '-P' . $position->id . '-C' . $index,
+                        'voter_id' => auth()->id(),
+                        'receipt_id' => $receiptId,
                         'ip_address' => $request->ip(),
                         'user_agent' => $request->userAgent(),
                     ]);
-                    $votesSaved++;
+                    $hasVotes = true;
                 }
             }
 
+            // Record participation
             Participation::create([
                 'voting_session_id' => $votingSession->id,
-                'user_id' => $user->id,
+                'user_id' => auth()->id(),
                 'receipt_id' => $receiptId,
-                'has_votes' => $hasAnyVotes,
+                'has_votes' => $hasVotes,
                 'voted_at' => now(),
             ]);
 
             DB::commit();
 
-            Log::info('Vote submission completed', [
-                'session_id' => $votingSession->id,
-                'user_id' => $user->id,
-                'receipt_id' => $receiptId,
-                'votes_saved' => $votesSaved,
-                'has_votes' => $hasAnyVotes
-            ]);
+            // Clear the release code validation session
+            session()->forget("release_code_validated_{$votingSession->id}");
 
-            return redirect()->route('student.confirmation', [
-                'session' => $votingSession->id,
-                'receipt' => $receiptId,
-            ]);
+            return redirect()->route('student.confirmation')
+                ->with([
+                    'receipt_id' => $receiptId,
+                    'voting_session_id' => $votingSession->id,
+                ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Vote submission failed: ' . $e->getMessage());
 
-            Log::error('Vote submission failed', [
-                'session_id' => $votingSession->id,
-                'user_id' => $user->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return back()->withInput()->with('error', $e->getMessage());
+            return back()->with('error', 'Failed to submit your vote. Please try again.');
         }
     }
 
+    /**
+     * Show confirmation page
+     */
     public function confirmation(Request $request)
     {
-        $votingSession = VotingSession::with('positions')->findOrFail($request->session);
+        $receiptId = session('receipt_id');
+        $votingSessionId = session('voting_session_id');
 
-        $votes = Vote::where('voter_id', auth()->id())
-            ->where('voting_session_id', $request->session)
+        if (!$receiptId || !$votingSessionId) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'No vote confirmation found.');
+        }
+
+        $votingSession = VotingSession::findOrFail($votingSessionId);
+        $votes = Vote::where('receipt_id', $receiptId)
             ->with(['candidate.student', 'position'])
             ->get();
 
-        $receiptId = $request->receipt;
-        $isBlank = $votes->isEmpty();
-
-        return view('student.confirmation', compact('votingSession', 'votes', 'receiptId', 'isBlank'));
+        return view('student.confirmation', compact('votingSession', 'votes', 'receiptId'));
     }
 
-    public function getReceipt($sessionId)
+    /**
+     * Get receipt data as JSON (for modal)
+     */
+    public function getReceipt(Request $request, $sessionId)
     {
-        try {
-            $user = auth()->user();
+        $participation = Participation::where('voting_session_id', $sessionId)
+            ->where('user_id', auth()->id())
+            ->first();
 
-            $votes = Vote::where('voter_id', $user->id)
-                ->where('voting_session_id', $sessionId)
-                ->with(['candidate.student', 'position', 'votingSession'])
-                ->get();
-
-            $votingSession = VotingSession::find($sessionId);
-
-            if (!$votingSession) {
-                return response()->json(['error' => 'Election not found'], 404);
-            }
-
-            $participation = Participation::where('voting_session_id', $sessionId)
-                ->where('user_id', $user->id)
-                ->first();
-
-            if (!$participation && $votes->isEmpty()) {
-                return response()->json([
-                    'error' => 'You did not participate in this election.',
-                    'has_participated' => false
-                ], 404);
-            }
-
-            $receiptId = $participation ? $participation->receipt_id : ($votes->isNotEmpty() ? $votes->first()->receipt_id : null);
-            $hasVotes = $participation ? $participation->has_votes : $votes->isNotEmpty();
-            $votedAt = $participation ? $participation->voted_at : ($votes->isNotEmpty() ? $votes->first()->created_at : null);
-
-            return response()->json([
-                'receipt_id' => $receiptId,
-                'voted_at' => $votedAt ? $votedAt->toISOString() : now()->toISOString(),
-                'session_title' => $votingSession->title,
-                'has_votes' => $hasVotes,
-                'has_participated' => $participation !== null || $votes->isNotEmpty(),
-                'votes' => $votes->map(function($vote) {
-                    return [
-                        'position' => $vote->position ? $vote->position->title : 'Unknown Position',
-                        'candidate' => $vote->candidate && $vote->candidate->student ? $vote->candidate->student->full_name : 'Unknown Candidate',
-                        'candidate_section' => ($vote->candidate && $vote->candidate->student && $vote->candidate->student->section) ? $vote->candidate->student->section : 'N/A',
-                    ];
-                })
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Error fetching receipt', [
-                'session_id' => $sessionId,
-                'user_id' => auth()->id(),
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->json(['error' => 'Failed to load receipt: ' . $e->getMessage()], 500);
+        if (!$participation) {
+            return response()->json(['error' => 'No receipt found'], 404);
         }
+
+        $votes = Vote::where('receipt_id', $participation->receipt_id)
+            ->with(['candidate.student', 'position'])
+            ->get();
+
+        $votingSession = VotingSession::find($sessionId);
+
+        return response()->json([
+            'success' => true,
+            'receipt_id' => $participation->receipt_id,
+            'voted_at' => $participation->voted_at,
+            'has_votes' => $participation->has_votes,
+            'session_title' => $votingSession ? $votingSession->title : 'Election',
+            'votes' => $votes->map(function ($vote) {
+                return [
+                    'position' => $vote->position->title,
+                    'candidate' => $vote->candidate->student->full_name,
+                    'candidate_section' => $vote->candidate->student->section ?? 'N/A',
+                ];
+            }),
+        ]);
+    }
+
+    /**
+     * Show receipt page (printable)
+     */
+    public function showReceiptPage($sessionId)
+    {
+        $participation = Participation::where('voting_session_id', $sessionId)
+            ->where('user_id', auth()->id())
+            ->first();
+
+        if (!$participation) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'No receipt found for this election.');
+        }
+
+        $votes = Vote::where('receipt_id', $participation->receipt_id)
+            ->with(['candidate.student', 'position'])
+            ->get();
+
+        $votingSession = VotingSession::findOrFail($sessionId);
+        $receiptId = $participation->receipt_id;
+
+        return view('student.receipt', compact('votingSession', 'votes', 'receiptId'));
     }
 }

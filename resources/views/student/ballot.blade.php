@@ -13,10 +13,26 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; backdrop-filter: blur(0px); }
+            to { opacity: 1; backdrop-filter: blur(4px); }
+        }
+
         /* ── Scroll container ── */
         .candidates-scroll-container {
             display: flex;
-            flex-wrap: wrap;          /* wrap into grid on desktop */
+            flex-wrap: wrap;
             gap: 1.25rem;
             padding: 1.25rem;
             overflow-x: auto;
@@ -30,8 +46,8 @@
         .candidate-card {
             animation: fadeIn 0.2s ease-out;
             cursor: pointer;
-            flex: 1 1 240px;          /* grow and wrap, min 240px */
-            max-width: 300px;         /* don't stretch too wide */
+            flex: 1 1 240px;
+            max-width: 300px;
             transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
@@ -59,7 +75,7 @@
             }
 
             .candidate-card {
-                flex: 0 0 260px;      /* fixed width, no grow/shrink */
+                flex: 0 0 260px;
                 max-width: 82vw;
             }
         }
@@ -95,12 +111,123 @@
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
         }
+
+        /* Modal overlay - blur effect */
+        .code-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: modalFadeIn 0.3s ease-out;
+        }
+
+        .code-modal {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 32px;
+            max-width: 500px;
+            width: 90%;
+            padding: 2rem;
+            animation: modalSlideIn 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .code-modal .modal-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #1a56db 0%, #7c3aed 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            box-shadow: 0 10px 25px -5px rgba(26, 86, 219, 0.3);
+        }
+
+        .code-modal .modal-icon i {
+            font-size: 2.5rem;
+            color: white;
+        }
+
+        .code-input-custom {
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 1rem;
+            font-size: 1.25rem;
+            letter-spacing: 6px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+
+        .code-input-custom:focus {
+            border-color: #1a56db;
+            box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.2);
+            outline: none;
+        }
+
+        .code-input-custom.is-invalid {
+            border-color: #ef4444;
+            background-color: #fef2f2;
+        }
+
+        .btn-verify {
+            background: linear-gradient(135deg, #1a56db 0%, #1447c0 100%);
+            border: none;
+            border-radius: 16px;
+            padding: 0.875rem;
+            font-size: 1rem;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+
+        .btn-verify:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -5px rgba(26, 86, 219, 0.4);
+        }
+
+        .btn-verify:active {
+            transform: translateY(0);
+        }
+
+        .close-modal-btn {
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 0.625rem;
+            transition: all 0.2s;
+        }
+
+        .close-modal-btn:hover {
+            background: #e2e8f0;
+        }
+
+        body.modal-open {
+            overflow: hidden;
+        }
+
+        /* Pulse animation for lock icon */
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .pulse-icon {
+            animation: pulse 2s ease-in-out infinite;
+        }
     </style>
 </head>
-<body class="bg-[#f0f4ff] font-['Segoe_UI',system-ui,sans-serif] min-h-screen">
+<body class="bg-[#f0f4ff] font-['Segoe_UI',system-ui,sans-serif] min-h-screen {{ $showCodeModal ? 'modal-open' : '' }}">
 
 {{-- HEADER --}}
-<div class="sticky top-0 z-50 bg-[#1a56db] text-white px-6 py-5 shadow-[0_2px_10px_rgba(26,86,219,0.3)]">
+<div class="sticky top-0 z-50 bg-[#1a56db] text-white px-6 py-5 shadow-[0_2px_10px_rgba(26,86,219,0.3)] {{ $showCodeModal ? 'opacity-50' : '' }}">
     <div class="max-w-[1000px] mx-auto">
         <div class="flex justify-between items-start">
             <div>
@@ -118,7 +245,7 @@
     </div>
 </div>
 
-<div class="max-w-[1000px] mx-auto py-6 px-4">
+<div class="max-w-[1000px] mx-auto py-6 px-4 {{ $showCodeModal ? 'opacity-50 pointer-events-none' : '' }}">
 
     @if($errors->any())
     <div class="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
@@ -140,20 +267,6 @@
 
     <form method="POST" action="{{ route('student.vote', $votingSession) }}" id="ballotForm">
         @csrf
-
-        @if($votingSession->requires_release_code)
-        <div class="bg-white rounded-2xl border-2 border-amber-400 p-5 mb-6">
-            <label class="block text-sm font-bold text-amber-800 mb-2">
-                <i class="bi bi-key-fill mr-1"></i>Release Code Required
-            </label>
-            <input type="text" name="release_code"
-                   class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 @error('release_code') border-red-500 @enderror"
-                   placeholder="Enter your release code" required>
-            @error('release_code')
-                <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
-            @enderror
-        </div>
-        @endif
 
         @foreach($votingSession->positions as $index => $position)
         <div class="bg-white rounded-[20px] border border-slate-200 mb-8 overflow-hidden transition-all duration-300 shadow-sm" id="posContainer{{ $position->id }}">
@@ -297,7 +410,156 @@
     </form>
 </div>
 
+{{-- Release Code Modal --}}
+@if($showCodeModal)
+<div id="releaseCodeModal" class="code-modal-overlay">
+    <div class="code-modal">
+        <div class="text-center">
+            <div class="modal-icon pulse-icon">
+                <i class="bi bi-shield-lock-fill"></i>
+            </div>
+
+            <h3 class="fw-bold text-2xl text-slate-800 mb-2">Secure Access Required</h3>
+            <p class="text-slate-500 text-sm mb-3">
+                This election requires a verification code
+            </p>
+
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-3 mb-4">
+                <div class="flex items-center justify-center gap-2 text-xs text-slate-600">
+                    <i class="bi bi-calendar-check text-primary"></i>
+                    <span>{{ $votingSession->title }}</span>
+                </div>
+                <div class="flex items-center justify-center gap-2 text-xs text-slate-500 mt-1">
+                    <i class="bi bi-clock"></i>
+                    <span>Ends: {{ $votingSession->end_date->format('M d, Y h:i A') }}</span>
+                </div>
+            </div>
+
+            <form id="releaseCodeForm">
+                @csrf
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-slate-700 text-left mb-2">
+                        <i class="bi bi-key me-1"></i> Enter Release Code
+                    </label>
+                    <input type="text"
+                           name="release_code"
+                           id="releaseCodeInput"
+                           class="code-input-custom w-full"
+                           placeholder="••••••••"
+                           autocomplete="off"
+                           required>
+                    <div id="codeError" class="text-danger text-sm mt-2" style="display: none;"></div>
+                </div>
+
+                <button type="submit" id="verifyBtn" class="btn-verify w-full text-white">
+                    <i class="bi bi-check2-circle me-2"></i> Verify & Access Ballot
+                </button>
+            </form>
+
+            <div class="mt-4 pt-3 border-t border-slate-100">
+                <div class="flex items-center justify-center gap-3 text-xs text-slate-400">
+                    <span><i class="bi bi-shield-check"></i> Secure</span>
+                    <span><i class="bi bi-clock-history"></i> One-time verification</span>
+                </div>
+                <a href="{{ route('student.dashboard') }}" class="text-slate-400 hover:text-slate-600 text-xs text-center block mt-3">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .text-primary { color: #1a56db; }
+    .text-danger { color: #ef4444; }
+    .bg-primary { background: #1a56db; }
+    .btn-verify:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+</style>
+
 <script>
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden';
+
+    // Handle form submission with AJAX
+    const releaseCodeForm = document.getElementById('releaseCodeForm');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const codeInput = document.getElementById('releaseCodeInput');
+    const errorDiv = document.getElementById('codeError');
+
+    if (releaseCodeForm) {
+        releaseCodeForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const code = codeInput.value.trim();
+
+            if (!code) {
+                errorDiv.textContent = 'Please enter a release code.';
+                errorDiv.style.display = 'block';
+                codeInput.classList.add('is-invalid');
+                return;
+            }
+
+            // Disable button and show loading
+            verifyBtn.disabled = true;
+            verifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Verifying...';
+
+            try {
+                const response = await fetch('{{ route("student.ballot.validate", $votingSession) }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        release_code: code
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Success - reload the page to show ballot
+                    window.location.reload();
+                } else {
+                    // Show error
+                    errorDiv.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> ' + (data.message || 'Invalid or expired release code. Please check and try again.');
+                    errorDiv.style.display = 'block';
+                    codeInput.classList.add('is-invalid');
+                    verifyBtn.disabled = false;
+                    verifyBtn.innerHTML = '<i class="bi bi-check2-circle me-2"></i> Verify & Access Ballot';
+
+                    // Shake animation for error
+                    const modal = document.querySelector('.code-modal');
+                    modal.style.animation = 'none';
+                    setTimeout(() => {
+                        modal.style.animation = 'modalSlideIn 0.4s cubic-bezier(0.34, 1.2, 0.64, 1)';
+                    }, 10);
+                }
+            } catch (error) {
+                errorDiv.innerHTML = '<i class="bi bi-wifi-off me-1"></i> Network error. Please try again.';
+                errorDiv.style.display = 'block';
+                verifyBtn.disabled = false;
+                verifyBtn.innerHTML = '<i class="bi bi-check2-circle me-2"></i> Verify & Access Ballot';
+            }
+        });
+
+        // Remove error styling when user types
+        codeInput.addEventListener('input', function() {
+            this.classList.remove('is-invalid');
+            errorDiv.style.display = 'none';
+        });
+    }
+</script>
+@endif
+
+<script>
+    // Only initialize ballot JS if modal is not shown
+    @if(!$showCodeModal)
     document.addEventListener('DOMContentLoaded', function() {
         const totalPositions = {{ $votingSession->positions->count() }};
         let selections = {};
@@ -323,7 +585,6 @@
         function updatePositionStatus(posId) {
             const statusEl = document.getElementById(`posStatus${posId}`);
             const container = document.getElementById(`posContainer${posId}`);
-            const counterEl = document.getElementById(`selectedCounter${posId}`);
 
             if (!statusEl) return;
 
@@ -331,17 +592,14 @@
                 statusEl.textContent = `✓ ${selections[posId].length} selected`;
                 statusEl.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-green-100 text-green-700';
                 if (container) container.classList.remove('opacity-60');
-                if (counterEl) counterEl.textContent = `(${selections[posId].length} selected)`;
             } else if (skippedPositions[posId]) {
                 statusEl.textContent = '⨯ Skipped';
                 statusEl.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-amber-100 text-amber-700';
                 if (container) container.classList.add('opacity-60');
-                if (counterEl) counterEl.textContent = '(0 selected)';
             } else {
                 statusEl.textContent = 'Not selected';
                 statusEl.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-slate-200 text-slate-500';
                 if (container) container.classList.remove('opacity-60');
-                if (counterEl) counterEl.textContent = '(0 selected)';
             }
         }
 
@@ -484,6 +742,7 @@
             }
         });
     });
+    @endif
 </script>
 </body>
 </html>

@@ -25,17 +25,11 @@ class ReleaseCode extends Model
         return $this->is_active && (!$this->expires_at || $this->expires_at > now());
     }
 
-    /**
-     * Generate a random release code
-     */
     public static function generateCode($length = 8): string
     {
         return strtoupper(Str::random($length));
     }
 
-    /**
-     * Create a new release code for a session
-     */
     public static function createForSession($sessionId, $description = null, $expiresInDays = null): self
     {
         $code = self::generateCode();
@@ -49,9 +43,20 @@ class ReleaseCode extends Model
         ]);
     }
 
-    /**
-     * Scope to get active codes
-     */
+    public static function verifyCode($sessionId, $code): bool
+    {
+        $releaseCode = self::where('voting_session_id', $sessionId)
+            ->where('code', strtoupper(trim($code)))
+            ->where('is_active', true)
+            ->first();
+
+        if (!$releaseCode) {
+            return false;
+        }
+
+        return $releaseCode->isValid();
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true)
@@ -61,9 +66,6 @@ class ReleaseCode extends Model
             });
     }
 
-    /**
-     * Mark code as used/inactive
-     */
     public function markAsUsed(): void
     {
         $this->update(['is_active' => false]);

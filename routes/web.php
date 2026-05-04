@@ -27,6 +27,7 @@ Route::middleware('student')->group(function () {
     Route::get('/dashboard', [Student\DashboardController::class, 'index'])->name('student.dashboard');
 
     // Voting
+    Route::post('/vote/{votingSession}/validate', [Student\VotingBallotController::class, 'validateReleaseCode'])->name('student.ballot.validate');
     Route::get('/vote/{votingSession}', [Student\VotingBallotController::class, 'show'])->name('student.ballot');
     Route::post('/vote/{votingSession}', [Student\VotingBallotController::class, 'submit'])->name('student.vote');
     Route::get('/confirmation', [Student\VotingBallotController::class, 'confirmation'])->name('student.confirmation');
@@ -56,7 +57,7 @@ Route::middleware('student')->group(function () {
         // Candidacy management
         Route::post('/candidacy/apply', [Student\ProfileController::class, 'applyForCandidacy'])->name('candidacy.apply');
         Route::delete('/profile/candidacy/{candidate}', [Student\ProfileController::class, 'withdrawCandidacy'])
-    ->name('profile.candidacy.withdraw');
+            ->name('profile.candidacy.withdraw');
     });
 });
 
