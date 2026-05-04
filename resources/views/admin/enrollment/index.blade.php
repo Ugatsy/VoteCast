@@ -3,33 +3,20 @@
 
 @section('content')
 
-{{-- Session Alerts --}}
-@if(session('success'))
-<div class="alert alert-success alert-dismissible fade show shadow-sm mb-4" role="alert">
-    <i class="bi bi-check-circle me-2"></i>{{ session('success') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-@endif
-
-@if(session('warning'))
-<div class="alert alert-warning alert-dismissible fade show shadow-sm mb-4" role="alert">
-    <i class="bi bi-exclamation-triangle me-2"></i>{{ session('warning') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-@endif
-
-@if(session('error'))
-<div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4" role="alert">
-    <i class="bi bi-x-circle me-2"></i>{{ session('error') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-@endif
-
 {{-- Active Semester Card --}}
 <div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
     <div class="card-header bg-white py-3">
         <strong><i class="bi bi-calendar3 me-2 text-primary"></i>Active Semester</strong>
-        <span class="badge bg-primary ms-2">{{ $currentSemester }} {{ $currentAcademicYear }}</span>
+        @php
+            $activeSemester = App\Models\Semester::getCurrent();
+        @endphp
+        @if($activeSemester)
+            <span class="badge bg-primary ms-2">{{ $activeSemester->name }} 
+                {{ $activeSemester->academic_year ?? $currentAcademicYear }}
+            </span>
+        @else
+            <span class="badge bg-warning ms-2">No active semester set</span>
+        @endif
     </div>
     <div class="card-body">
         <form method="POST" action="{{ route('admin.enrollment.semester') }}" class="row g-3 align-items-end">
@@ -37,15 +24,16 @@
             <div class="col-md-4">
                 <label class="form-label small fw-semibold">Semester</label>
                 <select name="semester" class="form-select">
-                    <option value="1st Semester" @selected($currentSemester === '1st Semester')>1st Semester</option>
-                    <option value="2nd Semester" @selected($currentSemester === '2nd Semester')>2nd Semester</option>
-                    <option value="Summer"       @selected($currentSemester === 'Summer')>Summer</option>
+                    <option value="1st Semester" @selected(($activeSemester && $activeSemester->name === '1st Semester') || $currentSemester === '1st Semester')>1st Semester</option>
+                    <option value="2nd Semester" @selected(($activeSemester && $activeSemester->name === '2nd Semester') || $currentSemester === '2nd Semester')>2nd Semester</option>
+                    <option value="Summer"       @selected(($activeSemester && $activeSemester->name === 'Summer') || $currentSemester === 'Summer')>Summer</option>
                 </select>
             </div>
             <div class="col-md-4">
                 <label class="form-label small fw-semibold">Academic Year</label>
                 <input type="text" name="academic_year" class="form-control"
-                       value="{{ $currentAcademicYear }}" placeholder="e.g. 2025-2026" required>
+                       value="{{ $activeSemester->academic_year ?? $currentAcademicYear }}" 
+                       placeholder="e.g. 2025-2026" required>
             </div>
             <div class="col-md-4">
                 <button class="btn btn-primary w-100">
@@ -54,6 +42,7 @@
             </div>
         </form>
     </div>
+</div>
 
 {{-- Upload Form --}}
 <div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
@@ -64,6 +53,8 @@
         <form method="POST" action="{{ route('admin.enrollment.upload') }}"
               enctype="multipart/form-data" class="row g-3 align-items-end">
             @csrf
+            <input type="hidden" name="semester" value="{{ $currentSemester }}">
+            <input type="hidden" name="academic_year" value="{{ $currentAcademicYear }}">
             <div class="col-md-10">
                 <label class="form-label small fw-semibold">Excel File (.xlsx)</label>
                 <input type="file" name="excel_file" class="form-control"
@@ -77,11 +68,13 @@
         </form>
         <div class="mt-3 p-3 bg-light rounded small text-muted">
             <i class="bi bi-info-circle me-1"></i>
+            Uploading for: <strong>{{ $currentSemester }} {{ $currentAcademicYear }}</strong> &nbsp;·&nbsp;
             <strong>Expected format:</strong>
             Row 1–2 = School info · Row 4 = "Enrollment List" · <strong>Row 5 = Period</strong> (e.g. "1st Semester 2025-2026") · Row 6 = Course · Row 8 = Column headers ·
             <strong>Row 9+ = Student data</strong> (No, Code, Last Name, First Name, Middle Name, Sex, Course, Year, Units, Section)
         </div>
     </div>
+</div>
 
 {{-- Upload History --}}
 <div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
@@ -173,8 +166,9 @@
             </tr>
             @endforelse
             </tbody>
-        </table>
+         </table>
     </div>
+</div>
 
 {{-- Current Enrollment List --}}
 <div class="card border-0 shadow-sm" style="border-radius:10px">

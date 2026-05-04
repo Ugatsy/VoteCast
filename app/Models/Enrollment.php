@@ -29,9 +29,19 @@ class Enrollment extends Model
 
     public function scopeCurrent($query)
     {
-        $semester     = session('current_semester', '1st Semester');
+        // Try to get active semester from database first
+        $activeSemester = Semester::where('is_active', true)->first();
+        
+        if ($activeSemester) {
+            return $query->where('semester', $activeSemester->name)
+                         ->where('academic_year', $activeSemester->academic_year)
+                         ->where('is_active', true);
+        }
+        
+        // Fallback to session
+        $semester = session('current_semester', '1st Semester');
         $academicYear = session('current_academic_year', date('Y') . '-' . (date('Y') + 1));
-
+        
         return $query->where('semester', $semester)
                      ->where('academic_year', $academicYear)
                      ->where('is_active', true);

@@ -68,10 +68,181 @@
         .badge-status-cancelled { background:#fee2e2; color:#991b1b; }
 
         .alert { border-radius: 8px; }
+
+        /* ══════════════════════════════════════
+           TOAST NOTIFICATION SYSTEM
+        ══════════════════════════════════════ */
+        #toast-container {
+            position: fixed;
+            top: 1.25rem;
+            right: 1.25rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            pointer-events: none;
+            width: 340px;
+        }
+
+        .vc-toast {
+            pointer-events: all;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.85rem;
+            background: #fff;
+            border-radius: 14px;
+            padding: 0.9rem 1rem;
+            box-shadow:
+                0 4px 6px -1px rgba(0,0,0,0.07),
+                0 10px 30px -5px rgba(0,0,0,0.12),
+                0 0 0 1px rgba(0,0,0,0.04);
+            /* Slide-in from right */
+            transform: translateX(calc(100% + 1.5rem));
+            opacity: 0;
+            transition:
+                transform 0.38s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.28s ease;
+            will-change: transform, opacity;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .vc-toast.toast-visible {
+            transform: translateX(0);
+            opacity: 1;
+        }
+
+        .vc-toast.toast-hiding {
+            transform: translateX(calc(100% + 1.5rem));
+            opacity: 0;
+        }
+
+        /* Icon bubble */
+        .toast-icon {
+            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            margin-top: 1px;
+        }
+
+        /* Text area */
+        .toast-body {
+            flex: 1;
+            min-width: 0;
+        }
+        .toast-title {
+            font-weight: 700;
+            font-size: 0.82rem;
+            letter-spacing: 0.2px;
+            line-height: 1;
+            margin-bottom: 0.3rem;
+        }
+        .toast-message {
+            font-size: 0.85rem;
+            color: #475569;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        /* Close button */
+        .toast-close {
+            flex-shrink: 0;
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            color: #94a3b8;
+            font-size: 1rem;
+            line-height: 1;
+            transition: color 0.15s;
+            margin-top: 1px;
+        }
+        .toast-close:hover { color: #475569; }
+
+        /* Progress bar */
+        .toast-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            border-radius: 0 0 14px 14px;
+            width: 100%;
+            transform-origin: left;
+            animation: toast-drain linear forwards;
+        }
+        @keyframes toast-drain {
+            from { transform: scaleX(1); }
+            to   { transform: scaleX(0); }
+        }
+
+        /* ── Variants ── */
+
+        /* Success */
+        .vc-toast--success .toast-icon {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+        .vc-toast--success .toast-title { color: #15803d; }
+        .vc-toast--success .toast-progress { background: #22c55e; }
+        .vc-toast--success {
+            border-left: 4px solid #22c55e;
+        }
+
+        /* Error */
+        .vc-toast--error .toast-icon {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+        .vc-toast--error .toast-title { color: #b91c1c; }
+        .vc-toast--error .toast-progress { background: #ef4444; }
+        .vc-toast--error {
+            border-left: 4px solid #ef4444;
+        }
+
+        /* Warning */
+        .vc-toast--warning .toast-icon {
+            background: #fef9c3;
+            color: #ca8a04;
+        }
+        .vc-toast--warning .toast-title { color: #a16207; }
+        .vc-toast--warning .toast-progress { background: #eab308; }
+        .vc-toast--warning {
+            border-left: 4px solid #eab308;
+        }
+
+        /* Info */
+        .vc-toast--info .toast-icon {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+        .vc-toast--info .toast-title { color: #1d4ed8; }
+        .vc-toast--info .toast-progress { background: #3b82f6; }
+        .vc-toast--info {
+            border-left: 4px solid #3b82f6;
+        }
     </style>
     @stack('styles')
 </head>
 <body>
+
+<!-- ── Toast Container ── -->
+<div id="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+<!-- ── Flash data passed to JS ── -->
+<script>
+    window._vcFlash = {
+        success: @json(session('success')),
+        error:   @json(session('error')),
+        warning: @json(session('warning')),
+        info:    @json(session('info')),
+        formError: @json($errors->any() ? $errors->first() : null),
+    };
+</script>
 
 <aside class="sidebar">
     <div class="sidebar-brand">
@@ -109,31 +280,123 @@
     </div>
 
     <div class="page-body">
-        @if(session('success'))
-            <div class="alert alert-success alert-dismissible fade show py-2">
-                <i class="bi bi-check-circle me-1"></i>{{ session('success') }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        @endif
-        @if(session('error'))
-            <div class="alert alert-danger alert-dismissible fade show py-2">
-                <i class="bi bi-exclamation-circle me-1"></i>{{ session('error') }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        @endif
-        @if($errors->any())
-            <div class="alert alert-danger alert-dismissible fade show py-2">
-                <i class="bi bi-exclamation-triangle me-1"></i>
-                {{ $errors->first() }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        @endif
-
         @yield('content')
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* ════════════════════════════════════════
+   VoteCast Toast System
+════════════════════════════════════════ */
+const VCToast = (() => {
+    const DURATION = 5000; // ms before auto-dismiss
+    const container = document.getElementById('toast-container');
+
+    const ICONS = {
+        success: 'bi-check-lg',
+        error:   'bi-x-lg',
+        warning: 'bi-exclamation-lg',
+        info:    'bi-info-lg',
+    };
+
+    const TITLES = {
+        success: 'Success',
+        error:   'Error',
+        warning: 'Warning',
+        info:    'Info',
+    };
+
+    function show(type, message, duration = DURATION) {
+        if (!message) return;
+
+        const toast = document.createElement('div');
+        toast.className = `vc-toast vc-toast--${type}`;
+        toast.setAttribute('role', 'alert');
+
+        toast.innerHTML = `
+            <div class="toast-icon">
+                <i class="bi ${ICONS[type] || ICONS.info}"></i>
+            </div>
+            <div class="toast-body">
+                <div class="toast-title">${TITLES[type] || 'Notice'}</div>
+                <div class="toast-message">${escapeHtml(message)}</div>
+            </div>
+            <button class="toast-close" aria-label="Dismiss">
+                <i class="bi bi-x"></i>
+            </button>
+            <div class="toast-progress" style="animation-duration: ${duration}ms"></div>
+        `;
+
+        container.appendChild(toast);
+
+        // Trigger slide-in on next frame
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                toast.classList.add('toast-visible');
+            });
+        });
+
+        // Auto-dismiss timer
+        let dismissTimer = setTimeout(() => dismiss(toast), duration);
+
+        // Pause progress & timer on hover
+        toast.addEventListener('mouseenter', () => {
+            clearTimeout(dismissTimer);
+            const bar = toast.querySelector('.toast-progress');
+            if (bar) bar.style.animationPlayState = 'paused';
+        });
+        toast.addEventListener('mouseleave', () => {
+            const bar = toast.querySelector('.toast-progress');
+            if (bar) bar.style.animationPlayState = 'running';
+            dismissTimer = setTimeout(() => dismiss(toast), 1500);
+        });
+
+        // Manual close
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            clearTimeout(dismissTimer);
+            dismiss(toast);
+        });
+    }
+
+    function dismiss(toast) {
+        toast.classList.add('toast-hiding');
+        toast.classList.remove('toast-visible');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    }
+
+    function escapeHtml(str) {
+        const d = document.createElement('div');
+        d.appendChild(document.createTextNode(String(str)));
+        return d.innerHTML;
+    }
+
+    return { show };
+})();
+
+/* ── Fire flash messages on load ── */
+document.addEventListener('DOMContentLoaded', () => {
+    const f = window._vcFlash || {};
+    // Stagger them slightly if multiple show at once
+    let delay = 0;
+    const fire = (type, msg) => {
+        if (!msg) return;
+        setTimeout(() => VCToast.show(type, msg), delay);
+        delay += 120;
+    };
+
+    fire('success', f.success);
+    fire('error',   f.error);
+    fire('warning', f.warning);
+    fire('info',    f.info);
+    fire('error',   f.formError);
+});
+
+/* ── Expose globally so child views can trigger toasts too ── */
+window.VCToast = VCToast;
+</script>
+
 @stack('scripts')
 </body>
 </html>

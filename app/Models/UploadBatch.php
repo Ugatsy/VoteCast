@@ -9,11 +9,13 @@ class UploadBatch extends Model
         'filename', 'semester', 'academic_year',
         'total_records', 'imported_records', 'skipped_records',
         'statistics', 'errors', 'uploaded_by',
+        'courses',   // ← required so the courses JSON column is mass-assignable
     ];
 
     protected $casts = [
         'statistics' => 'array',
         'errors'     => 'array',
+        'courses'    => 'array',
     ];
 
     public function enrollments(): \Illuminate\Database\Eloquent\Relations\HasMany
