@@ -11,66 +11,13 @@ use Illuminate\Support\Facades\DB;
 
 class VotingBallotController extends Controller
 {
-    /**
-     * Show the voting ballot
-     */
     public function show(VotingSession $votingSession)
-{
-    // Check if user is eligible
-    if (!$votingSession->canVote(auth()->user())) {
-        return redirect()->route('student.dashboard')
-            ->with('error', 'You are not eligible to vote in this election.');
-    }
-
-    // Check if user already voted
-    $alreadyVoted = auth()->user()->hasVotedInSession($votingSession->id);
-
-    if ($alreadyVoted && !$votingSession->allow_vote_changes) {
-        return redirect()->route('student.dashboard')
-            ->with('error', 'You have already voted in this election and vote changes are not allowed.');
-    }
-
-    $votingSession->load('positions.candidates.student');
-
-    // Pass showsCodeModal flag to view
-    $showCodeModal = $votingSession->requires_release_code && !session("release_code_validated_{$votingSession->id}");
-
-    return view('student.ballot', compact('votingSession', 'alreadyVoted', 'showCodeModal'));
-}
-
-    /**
-     * Validate release code before showing ballot
-     */
-   public function validateReleaseCode(Request $request, VotingSession $votingSession)
-{
-    $request->validate([
-        'release_code' => 'required|string|max:50',
-    ]);
-
-    if (!$votingSession->requires_release_code) {
-        return response()->json(['success' => true, 'redirect' => route('student.ballot', $votingSession)]);
-    }
-
-    if ($votingSession->validateReleaseCode($request->release_code)) {
-        session(["release_code_validated_{$votingSession->id}" => true]);
-        return response()->json(['success' => true, 'redirect' => route('student.ballot', $votingSession)]);
-    }
-
-    return response()->json(['success' => false, 'message' => 'Invalid or expired release code. Please check and try again.'], 422);
-}
-
-    /**
-     * Submit votes
-     */
-    public function submit(Request $request, VotingSession $votingSession)
     {
-        // Check if user is eligible
         if (!$votingSession->canVote(auth()->user())) {
             return redirect()->route('student.dashboard')
                 ->with('error', 'You are not eligible to vote in this election.');
         }
 
-        // Check if user already voted
         $alreadyVoted = auth()->user()->hasVotedInSession($votingSession->id);
 
         if ($alreadyVoted && !$votingSession->allow_vote_changes) {
@@ -78,7 +25,83 @@ class VotingBallotController extends Controller
                 ->with('error', 'You have already voted in this election and vote changes are not allowed.');
         }
 
-        // Validate release code if required
+        $votingSession->load('positions.candidates.student');
+
+        $showCodeModal = $votingSession->requires_release_code && !session("release_code_validated_{$votingSession->id}");
+
+        return view('student.ballot', compact('votingSession', 'alreadyVoted', 'showCodeModal'));
+    }
+
+    public function validateReleaseCode(Request $request, VotingSession $votingSession)
+    {
+        $request->validate([
+            'release_code' => 'required|string|max:50',
+        ]);
+
+        if (!$votingSession->requires_release_code) {
+            return response()->json(['success' => true, 'redirect' => route('student.ballot', $votingSession)]);
+        }
+
+        if ($votingSession->validateReleaseCode($request->release_code)) {
+            session(["release_code_validated_{$votingSession->id}" => true]);
+            return response()->json(['success' => true, 'redirect' => route('student.ballot', $votingSession)]);
+        }
+
+        return response()->json(['success' => false, 'message' => 'Invalid or expired release code. Please check and try again.'], 422);
+    }
+
+    public function validateQRCodeRedirect(Request $request)
+    {
+        $code = $request->get('code');
+
+        if (!$code) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'No QR code detected. Please try again.');
+        }
+
+        $releaseCode = ReleaseCode::where('code', strtoupper(trim($code)))
+            ->where('is_active', true)
+            ->where(function($q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->first();
+
+        if (!$releaseCode) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'Invalid or expired QR code.');
+        }
+
+        $votingSession = $releaseCode->votingSession;
+
+        if (!$votingSession->canVote(auth()->user())) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'You are not eligible to vote in this election.');
+        }
+
+        if (auth()->user()->hasVotedInSession($votingSession->id) && !$votingSession->allow_vote_changes) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'You have already voted in this election.');
+        }
+
+        session(["release_code_validated_{$votingSession->id}" => true]);
+
+        return redirect()->route('student.ballot', $votingSession);
+    }
+
+    public function submit(Request $request, VotingSession $votingSession)
+    {
+        if (!$votingSession->canVote(auth()->user())) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'You are not eligible to vote in this election.');
+        }
+
+        $alreadyVoted = auth()->user()->hasVotedInSession($votingSession->id);
+
+        if ($alreadyVoted && !$votingSession->allow_vote_changes) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'You have already voted in this election and vote changes are not allowed.');
+        }
+
         if ($votingSession->requires_release_code) {
             if (!session("release_code_validated_{$votingSession->id}")) {
                 return redirect()->route('student.ballot', $votingSession)
@@ -97,7 +120,6 @@ class VotingBallotController extends Controller
         DB::beginTransaction();
 
         try {
-            // If vote changes are allowed, remove previous votes
             if ($alreadyVoted && $votingSession->allow_vote_changes) {
                 Vote::where('voting_session_id', $votingSession->id)
                     ->where('voter_id', auth()->id())
@@ -108,7 +130,6 @@ class VotingBallotController extends Controller
                     ->delete();
             }
 
-            // Check if user is submitting any votes
             $hasVotes = false;
             $receiptId = uniqid('VOTE_', true);
 
@@ -118,7 +139,6 @@ class VotingBallotController extends Controller
                 $position = $votingSession->positions()->find($positionId);
                 if (!$position) continue;
 
-                // Ensure not exceeding max winners
                 $candidateIds = array_slice($candidateIds, 0, $position->max_winners);
 
                 foreach ($candidateIds as $candidateId) {
@@ -135,7 +155,6 @@ class VotingBallotController extends Controller
                 }
             }
 
-            // Record participation
             Participation::create([
                 'voting_session_id' => $votingSession->id,
                 'user_id' => auth()->id(),
@@ -146,7 +165,6 @@ class VotingBallotController extends Controller
 
             DB::commit();
 
-            // Clear the release code validation session
             session()->forget("release_code_validated_{$votingSession->id}");
 
             return redirect()->route('student.confirmation')
@@ -163,9 +181,6 @@ class VotingBallotController extends Controller
         }
     }
 
-    /**
-     * Show confirmation page
-     */
     public function confirmation(Request $request)
     {
         $receiptId = session('receipt_id');
@@ -184,9 +199,6 @@ class VotingBallotController extends Controller
         return view('student.confirmation', compact('votingSession', 'votes', 'receiptId'));
     }
 
-    /**
-     * Get receipt data as JSON (for modal)
-     */
     public function getReceipt(Request $request, $sessionId)
     {
         $participation = Participation::where('voting_session_id', $sessionId)
@@ -219,9 +231,6 @@ class VotingBallotController extends Controller
         ]);
     }
 
-    /**
-     * Show receipt page (printable)
-     */
     public function showReceiptPage($sessionId)
     {
         $participation = Participation::where('voting_session_id', $sessionId)

@@ -3,6 +3,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class ReleaseCode extends Model
 {
@@ -25,12 +26,12 @@ class ReleaseCode extends Model
         return $this->is_active && (!$this->expires_at || $this->expires_at > now());
     }
 
-    public static function generateCode($length = 8): string
+    public static function generateCode($length = 6): string
     {
         return strtoupper(Str::random($length));
     }
 
-    public static function createForSession($sessionId, $description = null, $expiresInDays = null): self
+    public static function createForSession($sessionId, $description = null, $expiresAt = null): self
     {
         $code = self::generateCode();
 
@@ -38,9 +39,19 @@ class ReleaseCode extends Model
             'voting_session_id' => $sessionId,
             'code' => $code,
             'description' => $description,
-            'expires_at' => $expiresInDays ? now()->addDays($expiresInDays) : null,
+            'expires_at' => $expiresAt,
             'is_active' => true,
         ]);
+    }
+
+    public function getQRCodeBase64Attribute(): string
+    {
+        $qrCode = QrCode::format('png')
+            ->size(200)
+            ->errorCorrection('H')
+            ->generate($this->code);
+
+        return 'data:image/png;base64,' . base64_encode($qrCode);
     }
 
     public static function verifyCode($sessionId, $code): bool
@@ -70,4 +81,5 @@ class ReleaseCode extends Model
     {
         $this->update(['is_active' => false]);
     }
+
 }

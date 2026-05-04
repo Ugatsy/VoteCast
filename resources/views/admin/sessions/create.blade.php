@@ -13,7 +13,6 @@
         <form method="POST" action="{{ route('admin.sessions.store') }}" id="electionForm">
             @csrf
 
-            {{-- Basic Info --}}
             <div class="mb-3">
                 <label class="form-label fw-semibold small">Election Title <span class="text-danger">*</span></label>
                 <input type="text" name="title" class="form-control @error('title') is-invalid @enderror"
@@ -27,7 +26,6 @@
                           placeholder="Optional details about this election">{{ old('description') }}</textarea>
             </div>
 
-            {{-- Dates --}}
             <div class="row g-3 mb-3">
                 <div class="col-md-6">
                     <label class="form-label fw-semibold small">Start Date & Time <span class="text-danger">*</span></label>
@@ -45,7 +43,6 @@
                 </div>
             </div>
 
-            {{-- Eligibility Category --}}
             <div class="mb-3">
                 <label class="form-label fw-semibold small">Who Can Vote? <span class="text-danger">*</span></label>
                 <select name="category" class="form-select" id="categorySelect" required>
@@ -57,7 +54,6 @@
                 </select>
             </div>
 
-            {{-- Course target --}}
             <div class="mb-3 d-none" id="courseField">
                 <label class="form-label fw-semibold small">Target Course</label>
                 <select name="target_course" class="form-select">
@@ -68,7 +64,6 @@
                 </select>
             </div>
 
-            {{-- Section target --}}
             <div class="mb-3 d-none" id="sectionField">
                 <label class="form-label fw-semibold small">Target Section</label>
                 <select name="target_section" class="form-select">
@@ -80,22 +75,20 @@
                 <div class="form-text text-muted">Only students in this section will be able to vote.</div>
             </div>
 
-            {{-- Department target --}}
             <div class="mb-3 d-none" id="deptField">
                 <label class="form-label fw-semibold small">Target Department</label>
                 <input type="text" name="target_department" class="form-control"
                        value="{{ old('target_department') }}" placeholder="e.g. CICT">
             </div>
 
-            {{-- Options --}}
             <div class="row g-3 mb-4">
-                {{-- <div class="col-md-6">
+                <div class="col-md-6">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" name="allow_vote_changes"
                                id="allowChanges" value="1" @checked(old('allow_vote_changes'))>
                         <label class="form-check-label small" for="allowChanges">Allow voters to change their vote</label>
                     </div>
-                </div> --}}
+                </div>
                 <div class="col-md-6">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" name="requires_release_code"
@@ -105,14 +98,14 @@
                 </div>
             </div>
 
-            {{-- Release Code Section (shows only when toggle is ON) --}}
+            {{-- Release Code Section with Live QR Code --}}
             <div id="releaseCodeSection" class="mb-4 p-3 bg-light rounded" style="display: none;">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <label class="fw-semibold small">
                         <i class="bi bi-qr-code me-1 text-primary"></i>Release Code Configuration
                     </label>
                     <button type="button" id="generateRandomCode" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-shuffle me-1"></i>Generate Random
+                        <i class="bi bi-shuffle me-1"></i>Generate Random Code
                     </button>
                 </div>
 
@@ -122,20 +115,36 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold">Release Code(s)</label>
+                    <label class="form-label small fw-semibold">Release Code(s) with QR</label>
                     <div id="codeInputsContainer">
-                        <div class="input-group mb-2 code-input-group">
-                            <input type="text" name="release_codes[]" class="form-control release-code-input"
-                                   placeholder="Enter release code (e.g., STUDENT2025)" value="{{ old('release_codes.0') }}">
-                            <button type="button" class="btn btn-outline-danger remove-code-btn" style="display: none;">
-                                <i class="bi bi-trash"></i>
-                            </button>
+                        <div class="code-card mb-3 p-3 border rounded bg-white" id="codeCard0">
+                            <div class="row align-items-center">
+                                <div class="col-md-5">
+                                    <label class="small text-muted mb-1">Release Code</label>
+                                    <div class="input-group">
+                                        <input type="text" name="release_codes[]" class="form-control release-code-input"
+                                               placeholder="Enter release code" value="{{ old('release_codes.0') }}"
+                                               oninput="updateQRCode(0, this.value)">
+                                        <button type="button" class="btn btn-outline-danger remove-code-btn" style="display: none;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-7">
+                                    <div class="text-center">
+                                        <label class="small text-muted mb-1">QR Code (Students can scan)</label>
+                                        <div id="qrCode0" class="qr-display p-2 bg-white rounded d-flex justify-content-center align-items-center" style="min-height: 120px;">
+                                            <div class="text-muted small">Enter a code to generate QR</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <button type="button" id="addMoreCodes" class="btn btn-sm btn-link text-primary p-0 mt-1">
+                    <button type="button" id="addMoreCodes" class="btn btn-sm btn-link text-primary p-0 mt-2">
                         <i class="bi bi-plus-circle me-1"></i>Add another code
                     </button>
-                    <div class="form-text">Students will need to enter one of these codes to access the voting ballot.</div>
+                    <div class="form-text mt-2">Each code has its own QR code. Students can type OR scan.</div>
                 </div>
             </div>
 
@@ -153,7 +162,11 @@
 @endsection
 
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs2@0.0.2/qrcode.min.js"></script>
 <script>
+    let qrInstances = {};
+    let codeCounter = 1;
+
     // Toggle release code section
     const releaseCodeToggle = document.getElementById('releaseCodeToggle');
     const releaseCodeSection = document.getElementById('releaseCodeSection');
@@ -164,6 +177,12 @@
         if (releaseCodeToggle.checked) {
             releaseCodeSection.style.display = 'block';
             updateExpiryPreview();
+            // Initialize QR for existing inputs
+            document.querySelectorAll('.release-code-input').forEach((input, idx) => {
+                if (input.value) {
+                    updateQRCode(idx, input.value);
+                }
+            });
         } else {
             releaseCodeSection.style.display = 'none';
         }
@@ -185,13 +204,90 @@
         }
     }
 
-    releaseCodeToggle.addEventListener('change', toggleReleaseCodeSection);
-    if (endDateInput) {
-        endDateInput.addEventListener('change', updateExpiryPreview);
-    }
-    toggleReleaseCodeSection();
+    function generateQRCode(elementId, code) {
+        if (!code || code.trim() === '') {
+            document.getElementById(elementId).innerHTML = '<div class="text-muted small">Enter a code to generate QR</div>';
+            return;
+        }
 
-    // Generate random code
+        // Clear previous QR
+        document.getElementById(elementId).innerHTML = '';
+
+        // Generate new QR code
+        try {
+            new QRCode(document.getElementById(elementId), {
+                text: code,
+                width: 100,
+                height: 100,
+                colorDark: "#1a56db",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        } catch(e) {
+            document.getElementById(elementId).innerHTML = '<div class="text-muted small">QR generation error</div>';
+        }
+    }
+
+    function updateQRCode(index, code) {
+        const elementId = `qrCode${index}`;
+        const container = document.getElementById(elementId);
+        if (container) {
+            if (qrInstances[index]) {
+                container.innerHTML = '';
+            }
+            generateQRCode(elementId, code);
+        }
+    }
+
+    function addNewCodeCard() {
+        const container = document.getElementById('codeInputsContainer');
+        const newIndex = codeCounter;
+
+        const newCard = document.createElement('div');
+        newCard.className = 'code-card mb-3 p-3 border rounded bg-white';
+        newCard.id = `codeCard${newIndex}`;
+        newCard.innerHTML = `
+            <div class="row align-items-center">
+                <div class="col-md-5">
+                    <label class="small text-muted mb-1">Release Code</label>
+                    <div class="input-group">
+                        <input type="text" name="release_codes[]" class="form-control release-code-input"
+                               placeholder="Enter release code" oninput="updateQRCode(${newIndex}, this.value)">
+                        <button type="button" class="btn btn-outline-danger remove-code-btn">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div class="text-center">
+                        <label class="small text-muted mb-1">QR Code (Students can scan)</label>
+                        <div id="qrCode${newIndex}" class="qr-display p-2 bg-white rounded d-flex justify-content-center align-items-center" style="min-height: 120px;">
+                            <div class="text-muted small">Enter a code to generate QR</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(newCard);
+        qrInstances[newIndex] = null;
+        codeCounter++;
+
+        // Show all remove buttons if more than 1
+        updateRemoveButtons();
+    }
+
+    function updateRemoveButtons() {
+        const cards = document.querySelectorAll('.code-card');
+        const removeBtns = document.querySelectorAll('.remove-code-btn');
+
+        if (cards.length === 1) {
+            removeBtns.forEach(btn => btn.style.display = 'none');
+        } else {
+            removeBtns.forEach(btn => btn.style.display = 'inline-flex');
+        }
+    }
+
     function generateRandomCode(length = 8) {
         const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
         let result = '';
@@ -201,63 +297,52 @@
         return result;
     }
 
+    // Event Listeners
+    releaseCodeToggle.addEventListener('change', toggleReleaseCodeSection);
+    if (endDateInput) {
+        endDateInput.addEventListener('change', updateExpiryPreview);
+    }
+    toggleReleaseCodeSection();
+
     document.getElementById('generateRandomCode').addEventListener('click', function() {
+        const randomCode = generateRandomCode(8);
         const firstInput = document.querySelector('.release-code-input');
         if (firstInput) {
-            firstInput.value = generateRandomCode(8);
+            firstInput.value = randomCode;
+            updateQRCode(0, randomCode);
         }
     });
 
-    // Add more code inputs
-    let codeCount = 1;
-    document.getElementById('addMoreCodes').addEventListener('click', function() {
-        codeCount++;
-        const container = document.getElementById('codeInputsContainer');
-        const newDiv = document.createElement('div');
-        newDiv.className = 'input-group mb-2 code-input-group';
-        newDiv.innerHTML = `
-            <input type="text" name="release_codes[]" class="form-control release-code-input"
-                   placeholder="Enter release code (e.g., CLASS2025)">
-            <button type="button" class="btn btn-outline-danger remove-code-btn">
-                <i class="bi bi-trash"></i>
-            </button>
-        `;
-        container.appendChild(newDiv);
+    document.getElementById('addMoreCodes').addEventListener('click', addNewCodeCard);
 
-        // Show all remove buttons if more than 1
-        document.querySelectorAll('.remove-code-btn').forEach(btn => {
-            btn.style.display = 'inline-flex';
-        });
+    // Initialize remove buttons and QR for existing
+    document.addEventListener('DOMContentLoaded', function() {
+        updateRemoveButtons();
 
-        // Add remove functionality
-        newDiv.querySelector('.remove-code-btn').addEventListener('click', function() {
-            newDiv.remove();
-            if (document.querySelectorAll('.code-input-group').length === 1) {
-                document.querySelector('.remove-code-btn').style.display = 'none';
+        // Initialize QR for any existing codes
+        document.querySelectorAll('.release-code-input').forEach((input, idx) => {
+            if (input.value) {
+                updateQRCode(idx, input.value);
             }
+            input.addEventListener('input', function() {
+                updateQRCode(idx, this.value);
+            });
         });
     });
 
-    // Initialize remove buttons
-    function initRemoveButtons() {
-        const removeBtns = document.querySelectorAll('.remove-code-btn');
-        if (removeBtns.length === 1) {
-            removeBtns[0].style.display = 'none';
-        } else {
-            removeBtns.forEach(btn => {
-                btn.style.display = 'inline-flex';
-                btn.addEventListener('click', function() {
-                    this.closest('.code-input-group').remove();
-                    if (document.querySelectorAll('.code-input-group').length === 1) {
-                        document.querySelector('.remove-code-btn').style.display = 'none';
-                    }
-                });
-            });
+    // Remove code card (delegation)
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-code-btn')) {
+            const btn = e.target.closest('.remove-code-btn');
+            const card = btn.closest('.code-card');
+            if (card && document.querySelectorAll('.code-card').length > 1) {
+                card.remove();
+                updateRemoveButtons();
+            }
         }
-    }
-    initRemoveButtons();
+    });
 
-    // Category toggle (existing)
+    // Category toggle
     const sel = document.getElementById('categorySelect');
     const courseF = document.getElementById('courseField');
     const sectionF = document.getElementById('sectionField');
@@ -275,5 +360,25 @@
 
     sel.addEventListener('change', toggleFields);
     toggleFields();
+
+    // Form validation - ensure codes are not empty
+    document.getElementById('electionForm').addEventListener('submit', function(e) {
+        if (releaseCodeToggle.checked) {
+            const codeInputs = document.querySelectorAll('.release-code-input');
+            let hasEmpty = false;
+            codeInputs.forEach(input => {
+                if (!input.value.trim()) {
+                    hasEmpty = true;
+                    input.classList.add('is-invalid');
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+            });
+            if (hasEmpty) {
+                e.preventDefault();
+                alert('Please enter release codes for all fields or remove empty ones.');
+            }
+        }
+    });
 </script>
 @endpush

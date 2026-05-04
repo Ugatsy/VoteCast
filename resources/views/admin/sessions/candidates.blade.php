@@ -167,6 +167,7 @@
         Done — View Election →
     </a>
 </div>
+@include('admin.partials.qr-codes-modal')
 @endsection
 
 @push('scripts')

@@ -52,7 +52,6 @@
     </div>
 </div>
 
-{{-- Status Control --}}
 <div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
     <div class="card-header bg-white py-3"><strong>Change Status</strong></div>
     <div class="card-body">
@@ -68,7 +67,6 @@
     </div>
 </div>
 
-{{-- Voter Turnout --}}
 <div class="row g-3 mb-4">
     <div class="col-md-4">
         <div class="stat-card">
@@ -92,7 +90,6 @@
     </div>
 </div>
 
-{{-- Completed export call-to-action banner --}}
 @if($votingSession->status === 'completed')
 <div class="alert alert-success border-0 shadow-sm d-flex align-items-center gap-3 mb-4" style="border-radius:10px">
     <i class="bi bi-trophy-fill fs-4 text-success"></i>
@@ -113,32 +110,58 @@
 </div>
 @endif
 
-{{-- Display Release Codes if enabled --}}
 @if($votingSession->requires_release_code && $votingSession->releaseCodes->count())
 <div class="card border-0 shadow-sm mb-4" style="border-radius:10px">
     <div class="card-header bg-white py-3">
-        <strong><i class="bi bi-qr-code me-2 text-primary"></i>Active Release Codes</strong>
+        <strong><i class="bi bi-qr-code me-2 text-primary"></i>Release Codes & QR Codes</strong>
         <span class="badge bg-primary ms-2">{{ $votingSession->releaseCodes->count() }} codes</span>
     </div>
     <div class="card-body">
         <div class="alert alert-info small mb-3">
             <i class="bi bi-info-circle me-1"></i>
-            Students must enter one of these codes to access the voting ballot.
+            Students can either type the code OR scan the QR code to access the voting ballot.
         </div>
-        <div class="row g-2">
+        <div class="row g-4">
             @foreach($votingSession->releaseCodes as $code)
-            <div class="col-md-3">
-                <div class="border rounded p-3 text-center bg-light">
-                    <code class="fw-bold fs-5">{{ $code->code }}</code>
-                    @if($code->expires_at)
-                        <div class="small text-muted mt-1">
-                            <i class="bi bi-clock"></i> Expires: {{ $code->expires_at->format('M d, Y') }}
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100" style="border-radius: 16px;">
+                    <div class="card-body text-center">
+                        <!-- QR Code -->
+                        <div class="mb-3 p-3 bg-white rounded d-flex justify-content-center" style="background: #f8fafc; min-height: 200px;">
+                            {!! QrCode::size(160)->errorCorrection('H')->generate($code->code) !!}
                         </div>
-                    @else
-                        <div class="small text-muted mt-1">No expiry</div>
-                    @endif
-                    <div class="small text-success mt-1">
-                        <i class="bi bi-check-circle"></i> Active
+
+                        <!-- Code Display -->
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+                                <code class="fw-bold fs-4 bg-light px-3 py-2 rounded" style="letter-spacing: 2px;">{{ $code->code }}</code>
+                                <button class="btn btn-sm btn-outline-primary copy-code-btn" data-code="{{ $code->code }}" title="Copy Code">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Code Details -->
+                        <div class="small text-muted">
+                            @if($code->description)
+                                <div><i class="bi bi-tag"></i> {{ $code->description }}</div>
+                            @endif
+                            @if($code->expires_at)
+                                <div><i class="bi bi-clock"></i> Expires: {{ $code->expires_at->format('M d, Y') }}</div>
+                            @else
+                                <div><i class="bi bi-infinity"></i> No expiry</div>
+                            @endif
+                            <div class="mt-2">
+                                <span class="badge bg-success">Active</span>
+                            </div>
+                        </div>
+
+                        <!-- Download Button -->
+                        <div class="mt-3">
+                            <a href="{{ route('admin.release-codes.qr.download', $code) }}" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-download"></i> Download QR (PNG)
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -148,7 +171,6 @@
 </div>
 @endif
 
-{{-- Positions Summary with Real-time Vote Counts --}}
 <div class="card border-0 shadow-sm" style="border-radius:10px">
     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
         <strong>Positions & Candidates</strong>
@@ -187,7 +209,6 @@
                                 <i class="bi bi-chat-quote"></i> {{ Str::limit($candidate->manifesto, 100) }}
                             </div>
                         @endif
-                        {{-- Progress Bar --}}
                         @php
                             $percentage = $positionTotalVotes > 0 ? ($candidate->votes_count / $positionTotalVotes * 100) : 0;
                         @endphp
@@ -254,6 +275,32 @@
     transition: width 0.3s ease-in-out;
 }
 </style>
+<script>
+document.querySelectorAll('.copy-code-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const code = this.dataset.code;
+        navigator.clipboard.writeText(code);
+        const originalIcon = this.innerHTML;
+        this.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
+        setTimeout(() => {
+            this.innerHTML = originalIcon;
+        }, 2000);
+    });
+});
+</script>
+<script>
+document.querySelectorAll('.copy-code').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const code = this.dataset.code;
+        navigator.clipboard.writeText(code);
+        const originalIcon = this.innerHTML;
+        this.innerHTML = '<i class="bi bi-check-lg text-success"></i>';
+        setTimeout(() => {
+            this.innerHTML = originalIcon;
+        }, 2000);
+    });
+});
+</script>
 
 @push('scripts')
 <script>
@@ -262,17 +309,12 @@ class VoteMonitor {
         this.sessionId = sessionId;
         this.pollingInterval = null;
         this.isRefreshing = false;
-
         this.init();
     }
 
     init() {
         this.startPolling();
-
-        // Auto-refresh every 3 seconds
         this.pollingInterval = setInterval(() => this.fetchVotes(), 3000);
-
-        // Stop polling when page is hidden to save resources
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 if (this.pollingInterval) {
@@ -290,9 +332,7 @@ class VoteMonitor {
 
     async fetchVotes() {
         if (this.isRefreshing) return;
-
         this.isRefreshing = true;
-
         try {
             const response = await fetch(`/admin/api/sessions/${this.sessionId}/votes`, {
                 headers: {
@@ -301,19 +341,15 @@ class VoteMonitor {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content
                 }
             });
-
             if (!response.ok) throw new Error('Network response was not ok');
-
             const data = await response.json();
             this.updateUI(data);
-
             const lastUpdateSpan = document.getElementById('lastUpdate');
             if (lastUpdateSpan) {
                 lastUpdateSpan.textContent = 'Just now';
                 lastUpdateSpan.classList.add('refreshing');
                 setTimeout(() => lastUpdateSpan.classList.remove('refreshing'), 500);
             }
-
         } catch (error) {
             console.error('Error fetching votes:', error);
         } finally {
@@ -329,7 +365,6 @@ class VoteMonitor {
                 totalVotedEl.classList.add('refreshing');
                 setTimeout(() => totalVotedEl.classList.remove('refreshing'), 500);
             }
-
             const turnoutEl = document.getElementById('turnout');
             if (turnoutEl && data.total_voters) {
                 const turnout = ((data.total_voted / data.total_voters) * 100).toFixed(1);
@@ -338,7 +373,6 @@ class VoteMonitor {
                 setTimeout(() => turnoutEl.classList.remove('refreshing'), 500);
             }
         }
-
         if (data.candidates) {
             Object.entries(data.candidates).forEach(([candidateId, voteCount]) => {
                 const voteEl = document.getElementById(`votes-${candidateId}`);
@@ -346,13 +380,11 @@ class VoteMonitor {
                     voteEl.textContent = new Intl.NumberFormat().format(voteCount);
                     voteEl.classList.add('refreshing');
                     setTimeout(() => voteEl.classList.remove('refreshing'), 500);
-
                     const progressEl = document.getElementById(`progress-${candidateId}`);
                     if (progressEl && data.progress_bars && data.progress_bars[candidateId] !== undefined) {
                         progressEl.style.width = `${data.progress_bars[candidateId]}%`;
                         progressEl.classList.add('refreshing');
                         setTimeout(() => progressEl.classList.remove('refreshing'), 500);
-
                         const percentSpan = progressEl.closest('.mt-2')?.querySelector('.text-end .small');
                         if (percentSpan) {
                             percentSpan.textContent = `${data.progress_bars[candidateId].toFixed(1)}%`;
@@ -361,7 +393,6 @@ class VoteMonitor {
                 }
             });
         }
-
         if (data.position_totals) {
             Object.entries(data.position_totals).forEach(([positionId, totalVotes]) => {
                 const positionCard = document.querySelector(`[data-position-id="${positionId}"]`);
@@ -391,7 +422,6 @@ class VoteMonitor {
 
 document.addEventListener('DOMContentLoaded', () => {
     const voteMonitor = new VoteMonitor({{ $votingSession->id }});
-
     window.addEventListener('beforeunload', () => {
         if (voteMonitor) voteMonitor.stop();
     });

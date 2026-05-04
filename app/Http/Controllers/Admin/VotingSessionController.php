@@ -26,7 +26,6 @@ class VotingSessionController extends Controller
 
     public function create()
     {
-        // Get active semester from database
         $activeSemester = Semester::getCurrent();
 
         if (!$activeSemester) {
@@ -34,7 +33,6 @@ class VotingSessionController extends Controller
                 ->with('error', 'Please set an active semester before creating an election.');
         }
 
-        // Filter courses and sections by active semester
         $courses = Enrollment::where('semester', $activeSemester->name)
             ->where('academic_year', $activeSemester->academic_year)
             ->where('is_active', true)
@@ -61,7 +59,7 @@ class VotingSessionController extends Controller
         return view('admin.sessions.create', compact('courses', 'sections', 'students', 'activeSemester'));
     }
 
-    public function store(Request $request)
+public function store(Request $request)
 {
     $request->validate([
         'title'       => 'required|string|max:255',
@@ -73,7 +71,6 @@ class VotingSessionController extends Controller
         'release_codes.*' => 'required|string|max:50|distinct',
     ]);
 
-    // Get active semester
     $activeSemester = Semester::getCurrent();
 
     if (!$activeSemester) {
@@ -97,22 +94,30 @@ class VotingSessionController extends Controller
         'academic_year'         => $activeSemester->academic_year,
     ]);
 
-    // Create release codes if required - expiry syncs with election end date
+    $generatedCodes = [];
+
     if ($request->boolean('requires_release_code') && $request->has('release_codes')) {
-        // Set expiry to the election end date
         $expiresAt = $request->end_date;
 
         foreach ($request->release_codes as $code) {
             if (!empty($code)) {
-                ReleaseCode::create([
+                $releaseCode = ReleaseCode::create([
                     'voting_session_id' => $session->id,
                     'code' => strtoupper(trim($code)),
                     'description' => 'Code created during election setup',
-                    'expires_at' => $expiresAt,  // ← Sync with election end date
+                    'expires_at' => $expiresAt,
                     'is_active' => true,
                 ]);
+                $generatedCodes[] = $releaseCode;
             }
         }
+    }
+
+    // Store generated codes in session for display on next page
+    if (count($generatedCodes) > 0) {
+        session()->flash('generated_codes', $generatedCodes);
+        session()->flash('generated_codes_session_id', $session->id);
+        session()->flash('show_codes_modal', true);
     }
 
     return redirect()->route('admin.sessions.candidates', $session)
@@ -151,14 +156,12 @@ class VotingSessionController extends Controller
     {
         $votingSession->load('positions.candidates.student');
 
-        // Get active semester from database
         $activeSemester = Semester::getCurrent();
 
         if (!$activeSemester) {
             return back()->withErrors(['error' => 'No active semester set. Please set an active semester first.']);
         }
 
-        // Filter students based on active semester AND session category
         $studentsQuery = User::students()
             ->active()
             ->where('semester', $activeSemester->name)
@@ -206,7 +209,6 @@ class VotingSessionController extends Controller
             'photo'      => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-        // Check if student is in the active semester
         $activeSemester = Semester::getCurrent();
         $student = User::find($request->student_id);
 

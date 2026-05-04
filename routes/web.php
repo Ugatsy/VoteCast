@@ -26,6 +26,9 @@ Route::middleware('student')->group(function () {
     // Dashboard
     Route::get('/dashboard', [Student\DashboardController::class, 'index'])->name('student.dashboard');
 
+    // QR Code validation - direct access from scanner
+    Route::get('/vote/validate', [Student\VotingBallotController::class, 'validateQRCodeRedirect'])->name('student.ballot.validate.redirect');
+
     // Voting
     Route::post('/vote/{votingSession}/validate', [Student\VotingBallotController::class, 'validateReleaseCode'])->name('student.ballot.validate');
     Route::get('/vote/{votingSession}', [Student\VotingBallotController::class, 'show'])->name('student.ballot');
@@ -106,6 +109,31 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/positions/{position}', [Admin\VotingSessionController::class, 'deletePosition'])->name('positions.delete');
         Route::post('/positions/{position}/candidates', [Admin\VotingSessionController::class, 'addCandidate'])->name('positions.candidates.add');
         Route::delete('/candidates/{candidate}', [Admin\VotingSessionController::class, 'removeCandidate'])->name('candidates.delete');
+
+        // ── Release Code & QR Code Routes ───────────────────────────────────────
+        Route::get('/release-codes/{releaseCode}/qr', function($releaseCodeId) {
+            $releaseCode = App\Models\ReleaseCode::findOrFail($releaseCodeId);
+            $qrCode = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('png')
+                ->size(400)
+                ->errorCorrection('H')
+                ->generate($releaseCode->code);
+
+            return response($qrCode)
+                ->header('Content-Type', 'image/png')
+                ->header('Content-Disposition', 'attachment; filename="qrcode-'.$releaseCode->code.'.png"');
+        })->name('release-codes.qr.download');
+
+        Route::get('/release-codes/{releaseCode}/qr/svg', function($releaseCodeId) {
+            $releaseCode = App\Models\ReleaseCode::findOrFail($releaseCodeId);
+            $qrCode = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')
+                ->size(400)
+                ->errorCorrection('H')
+                ->generate($releaseCode->code);
+
+            return response($qrCode)
+                ->header('Content-Type', 'image/svg+xml')
+                ->header('Content-Disposition', 'attachment; filename="qrcode-'.$releaseCode->code.'.svg"');
+        })->name('release-codes.qr.download-svg');
 
         // ── API Routes for Real-time Updates ────────────────────────────────────
         Route::prefix('api')->name('api.')->group(function () {
