@@ -2,29 +2,21 @@
 
 namespace App\Console\Commands;
 
-use App\Models\VotingSession;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 class UpdateVotingSessionStatus extends Command
 {
-    protected $signature = 'sessions:update-status';
-    protected $description = 'Auto update voting session status based on dates';
+    protected $signature   = 'sessions:update-status';
+    protected $description = 'Auto-sync voting session status from start/end dates';
 
-    public function handle()
+    public function handle(): void
     {
-        $now = now();
+        // Call the Postgres function directly — single round-trip, no PHP logic
+        $changed = DB::selectOne(
+            'SELECT "VoteCast".sync_all_session_statuses() AS updated'
+        )->updated;
 
-        // Activate scheduled sessions that have started
-        VotingSession::where('status', 'scheduled')
-            ->where('start_date', '<=', $now)
-            ->where('end_date', '>=', $now)
-            ->update(['status' => 'active']);
-
-        // Complete active sessions that have ended
-        VotingSession::where('status', 'active')
-            ->where('end_date', '<', $now)
-            ->update(['status' => 'completed']);
-
-        $this->info('Voting session statuses updated.');
+        $this->info("Synced {$changed} session(s).");
     }
 }

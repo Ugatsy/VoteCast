@@ -44,20 +44,11 @@ Route::middleware('student')->group(function () {
 
     // ── Student Profile Routes ────────────────────────────────────────────────
     Route::prefix('profile')->name('profile.')->group(function () {
-        // Main profile page
         Route::get('/', [Student\ProfileController::class, 'index'])->name('index');
-
-        // Profile updates
         Route::post('/update', [Student\ProfileController::class, 'updateProfile'])->name('update');
-
-        // Photo management (Cloudinary)
         Route::post('/photo', [Student\ProfileController::class, 'uploadPhoto'])->name('photo');
         Route::delete('/photo', [Student\ProfileController::class, 'removePhoto'])->name('photo.remove');
-
-        // Manifesto & Platform
         Route::post('/manifesto', [Student\ProfileController::class, 'updateManifesto'])->name('manifesto');
-
-        // Candidacy management
         Route::post('/candidacy/apply', [Student\ProfileController::class, 'applyForCandidacy'])->name('candidacy.apply');
         Route::delete('/profile/candidacy/{candidate}', [Student\ProfileController::class, 'withdrawCandidacy'])
             ->name('profile.candidacy.withdraw');
@@ -97,6 +88,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/sessions', [Admin\VotingSessionController::class, 'store'])->name('sessions.store');
         Route::get('/sessions/{votingSession}', [Admin\VotingSessionController::class, 'show'])->name('sessions.show');
         Route::post('/sessions/{votingSession}/status', [Admin\VotingSessionController::class, 'updateStatus'])->name('sessions.status');
+        Route::patch('/sessions/{votingSession}/reschedule', [Admin\VotingSessionController::class, 'reschedule'])->name('sessions.reschedule');
+        Route::delete('/sessions/{votingSession}', [Admin\VotingSessionController::class, 'destroy'])->name('sessions.destroy');
         Route::get('/sessions/{votingSession}/results', [Admin\VotingSessionController::class, 'results'])->name('sessions.results');
 
         // ── Export Routes ────────────────────────────────────────────────────
@@ -109,31 +102,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/positions/{position}', [Admin\VotingSessionController::class, 'deletePosition'])->name('positions.delete');
         Route::post('/positions/{position}/candidates', [Admin\VotingSessionController::class, 'addCandidate'])->name('positions.candidates.add');
         Route::delete('/candidates/{candidate}', [Admin\VotingSessionController::class, 'removeCandidate'])->name('candidates.delete');
-
-        // ── Release Code & QR Code Routes ───────────────────────────────────────
-        Route::get('/release-codes/{releaseCode}/qr', function($releaseCodeId) {
-            $releaseCode = App\Models\ReleaseCode::findOrFail($releaseCodeId);
-            $qrCode = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('png')
-                ->size(400)
-                ->errorCorrection('H')
-                ->generate($releaseCode->code);
-
-            return response($qrCode)
-                ->header('Content-Type', 'image/png')
-                ->header('Content-Disposition', 'attachment; filename="qrcode-'.$releaseCode->code.'.png"');
-        })->name('release-codes.qr.download');
-
-        Route::get('/release-codes/{releaseCode}/qr/svg', function($releaseCodeId) {
-            $releaseCode = App\Models\ReleaseCode::findOrFail($releaseCodeId);
-            $qrCode = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')
-                ->size(400)
-                ->errorCorrection('H')
-                ->generate($releaseCode->code);
-
-            return response($qrCode)
-                ->header('Content-Type', 'image/svg+xml')
-                ->header('Content-Disposition', 'attachment; filename="qrcode-'.$releaseCode->code.'.svg"');
-        })->name('release-codes.qr.download-svg');
 
         // ── API Routes for Real-time Updates ────────────────────────────────────
         Route::prefix('api')->name('api.')->group(function () {

@@ -6,6 +6,7 @@
     <title>VoteCast Admin — @yield('title', 'Dashboard')</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         :root {
             --vc-primary: #1a56db;
@@ -289,9 +290,13 @@
 <script>
 /* ════════════════════════════════════════
    VoteCast Toast System
+   - All toasts appear instantly, stacked
+   - Each runs its own independent timer
+   - Hover pauses that toast only
+   - New toasts never block existing ones
 ════════════════════════════════════════ */
 const VCToast = (() => {
-    const DURATION = 5000; // ms before auto-dismiss
+    const DURATION  = 5000;
     const container = document.getElementById('toast-container');
 
     const ICONS = {
@@ -300,7 +305,6 @@ const VCToast = (() => {
         warning: 'bi-exclamation-lg',
         info:    'bi-info-lg',
     };
-
     const TITLES = {
         success: 'Success',
         error:   'Error',
@@ -314,56 +318,57 @@ const VCToast = (() => {
         const toast = document.createElement('div');
         toast.className = `vc-toast vc-toast--${type}`;
         toast.setAttribute('role', 'alert');
-
         toast.innerHTML = `
-            <div class="toast-icon">
-                <i class="bi ${ICONS[type] || ICONS.info}"></i>
-            </div>
+            <div class="toast-icon"><i class="bi ${ICONS[type] || ICONS.info}"></i></div>
             <div class="toast-body">
                 <div class="toast-title">${TITLES[type] || 'Notice'}</div>
                 <div class="toast-message">${escapeHtml(message)}</div>
             </div>
-            <button class="toast-close" aria-label="Dismiss">
-                <i class="bi bi-x"></i>
-            </button>
-            <div class="toast-progress" style="animation-duration: ${duration}ms"></div>
+            <button class="toast-close" aria-label="Dismiss"><i class="bi bi-x"></i></button>
+            <div class="toast-progress" style="animation-duration:${duration}ms"></div>
         `;
 
         container.appendChild(toast);
 
-        // Trigger slide-in on next frame
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                toast.classList.add('toast-visible');
-            });
-        });
+        // Slide in immediately — no stagger, no delay
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            toast.classList.add('toast-visible');
+        }));
 
-        // Auto-dismiss timer
-        let dismissTimer = setTimeout(() => dismiss(toast), duration);
+        // Each toast manages its own independent countdown
+        let remaining  = duration;
+        let startedAt  = Date.now();
+        let timer      = setTimeout(() => dismiss(toast), remaining);
+        const bar      = toast.querySelector('.toast-progress');
 
-        // Pause progress & timer on hover
         toast.addEventListener('mouseenter', () => {
-            clearTimeout(dismissTimer);
-            const bar = toast.querySelector('.toast-progress');
+            // Pause: record how much time is left
+            clearTimeout(timer);
+            remaining -= Date.now() - startedAt;
             if (bar) bar.style.animationPlayState = 'paused';
         });
+
         toast.addEventListener('mouseleave', () => {
-            const bar = toast.querySelector('.toast-progress');
+            // Resume from where it left off
+            startedAt = Date.now();
+            timer = setTimeout(() => dismiss(toast), remaining);
             if (bar) bar.style.animationPlayState = 'running';
-            dismissTimer = setTimeout(() => dismiss(toast), 1500);
         });
 
-        // Manual close
         toast.querySelector('.toast-close').addEventListener('click', () => {
-            clearTimeout(dismissTimer);
+            clearTimeout(timer);
             dismiss(toast);
         });
+
+        return toast; // caller can dismiss manually if needed
     }
 
     function dismiss(toast) {
-        toast.classList.add('toast-hiding');
-        toast.classList.remove('toast-visible');
+        if (!toast || !toast.isConnected) return;
+        toast.classList.replace('toast-visible', 'toast-hiding');
         toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+        // Safety fallback in case transitionend doesn't fire
+        setTimeout(() => toast.isConnected && toast.remove(), 600);
     }
 
     function escapeHtml(str) {
@@ -372,28 +377,20 @@ const VCToast = (() => {
         return d.innerHTML;
     }
 
-    return { show };
+    return { show, dismiss };
 })();
 
-/* ── Fire flash messages on load ── */
+/* ── Fire all flash messages at once on load — no stagger ── */
 document.addEventListener('DOMContentLoaded', () => {
     const f = window._vcFlash || {};
-    // Stagger them slightly if multiple show at once
-    let delay = 0;
-    const fire = (type, msg) => {
-        if (!msg) return;
-        setTimeout(() => VCToast.show(type, msg), delay);
-        delay += 120;
-    };
-
-    fire('success', f.success);
-    fire('error',   f.error);
-    fire('warning', f.warning);
-    fire('info',    f.info);
-    fire('error',   f.formError);
+    if (f.success)   VCToast.show('success', f.success);
+    if (f.error)     VCToast.show('error',   f.error);
+    if (f.warning)   VCToast.show('warning', f.warning);
+    if (f.info)      VCToast.show('info',    f.info);
+    if (f.formError) VCToast.show('error',   f.formError);
 });
 
-/* ── Expose globally so child views can trigger toasts too ── */
+/* ── Expose globally so child views can trigger toasts ── */
 window.VCToast = VCToast;
 </script>
 

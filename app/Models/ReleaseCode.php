@@ -46,12 +46,12 @@ class ReleaseCode extends Model
 
     public function getQRCodeBase64Attribute(): string
     {
-        $qrCode = QrCode::format('png')
+        $qrCode = QrCode::format('svg')
             ->size(200)
             ->errorCorrection('H')
             ->generate($this->code);
 
-        return 'data:image/png;base64,' . base64_encode($qrCode);
+        return 'data:image/svg+xml;base64,' . base64_encode($qrCode);
     }
 
     public static function verifyCode($sessionId, $code): bool

@@ -12,16 +12,51 @@ use App\Models\User;
 use App\Models\Vote;
 use App\Models\VotingSession;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 
 class VotingSessionController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $sessions = VotingSession::with('creator', 'positions')
-            ->latest()
-            ->paginate(10);
+        // ── Real counts from DB (not from the current page) ──────────────────
+        $statusCounts = VotingSession::selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
 
-        return view('admin.sessions.index', compact('sessions'));
+        $totalCount     = VotingSession::count();
+        $activeCount    = $statusCounts->get('active', 0);
+        $scheduledCount = $statusCounts->get('scheduled', 0);
+        $completedCount = $statusCounts->get('completed', 0);
+
+        // ── Build query with optional search + status filter ─────────────────
+        $query = VotingSession::with(['creator', 'positions'])
+            ->latest();
+
+        // Status filter
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        // Search filter — matches title or description
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'ilike', "%{$search}%")
+                  ->orWhere('description', 'ilike', "%{$search}%")
+                  ->orWhere('target_course', 'ilike', "%{$search}%")
+                  ->orWhere('target_section', 'ilike', "%{$search}%");
+            });
+        }
+
+        $sessions = $query->paginate(10)->withQueryString();
+
+        return view('admin.sessions.index', compact(
+            'sessions',
+            'totalCount',
+            'activeCount',
+            'scheduledCount',
+            'completedCount'
+        ));
     }
 
     public function create()
@@ -59,75 +94,62 @@ class VotingSessionController extends Controller
         return view('admin.sessions.create', compact('courses', 'sections', 'students', 'activeSemester'));
     }
 
-public function store(Request $request)
-{
-    $request->validate([
-        'title'       => 'required|string|max:255',
-        'description' => 'nullable|string',
-        'category'    => 'required|in:department,course,section,manual',
-        'start_date'  => 'required|date',
-        'end_date'    => 'required|date|after:start_date',
-        'release_codes' => 'required_if:requires_release_code,1|array|min:1',
-        'release_codes.*' => 'required|string|max:50|distinct',
-    ]);
+    public function store(Request $request)
+    {
+        $requiresCode = $request->boolean('requires_release_code');
 
-    $activeSemester = Semester::getCurrent();
+        $request->validate([
+            'title'                  => 'required|string|max:255',
+            'description'            => 'nullable|string',
+            'category'               => 'required|in:department,course,section,manual',
+            'start_date'             => 'required|date',
+            'end_date'               => 'required|date|after:start_date',
+            'generated_release_code' => $requiresCode ? 'required|string|min:6|max:50' : 'nullable|string',
+        ]);
 
-    if (!$activeSemester) {
-        return back()->withErrors(['error' => 'No active semester set. Please set an active semester first.']);
-    }
+        $activeSemester = Semester::getCurrent();
 
-    $session = VotingSession::create([
-        'title'                 => $request->title,
-        'description'           => $request->description,
-        'category'              => $request->category,
-        'target_course'         => $request->target_course,
-        'target_department'     => $request->target_department,
-        'target_section'        => $request->target_section,
-        'status'                => 'scheduled',
-        'start_date'            => $request->start_date,
-        'end_date'              => $request->end_date,
-        'allow_vote_changes'    => $request->boolean('allow_vote_changes'),
-        'requires_release_code' => $request->boolean('requires_release_code'),
-        'created_by'            => auth()->id(),
-        'semester'              => $activeSemester->name,
-        'academic_year'         => $activeSemester->academic_year,
-    ]);
-
-    $generatedCodes = [];
-
-    if ($request->boolean('requires_release_code') && $request->has('release_codes')) {
-        $expiresAt = $request->end_date;
-
-        foreach ($request->release_codes as $code) {
-            if (!empty($code)) {
-                $releaseCode = ReleaseCode::create([
-                    'voting_session_id' => $session->id,
-                    'code' => strtoupper(trim($code)),
-                    'description' => 'Code created during election setup',
-                    'expires_at' => $expiresAt,
-                    'is_active' => true,
-                ]);
-                $generatedCodes[] = $releaseCode;
-            }
+        if (!$activeSemester) {
+            return back()->withErrors(['error' => 'No active semester set. Please set an active semester first.']);
         }
-    }
 
-    // Store generated codes in session for display on next page
-    if (count($generatedCodes) > 0) {
-        session()->flash('generated_codes', $generatedCodes);
-        session()->flash('generated_codes_session_id', $session->id);
-        session()->flash('show_codes_modal', true);
-    }
+        $session = VotingSession::create([
+            'title'                 => $request->title,
+            'description'           => $request->description,
+            'category'              => $request->category,
+            'target_course'         => $request->target_course,
+            'target_department'     => $request->target_department,
+            'target_section'        => $request->target_section,
+            'status'                => 'scheduled',
+            'start_date'            => $request->start_date,
+            'end_date'              => $request->end_date,
+            'allow_vote_changes'    => $request->boolean('allow_vote_changes'),
+            'requires_release_code' => $requiresCode,
+            'created_by'            => auth()->id(),
+        ]);
 
-    return redirect()->route('admin.sessions.candidates', $session)
-        ->with('success', 'Election created! Now add positions and candidates.');
-}
+        if ($requiresCode && $request->filled('generated_release_code')) {
+            $releaseCode = ReleaseCode::create([
+                'voting_session_id' => $session->id,
+                'code'              => strtoupper(trim($request->generated_release_code)),
+                'description'       => 'Auto-generated during election setup',
+                'expires_at'        => $request->end_date,
+                'is_active'         => true,
+            ]);
+
+            session()->flash('generated_code_ids', [$releaseCode->id]);
+            session()->flash('generated_codes_session_id', $session->id);
+            session()->flash('show_codes_modal', true);
+        }
+
+        return redirect()->route('admin.sessions.candidates', $session)
+            ->with('success', 'Election created! Now add positions and candidates.');
+    }
 
     public function show(VotingSession $votingSession)
     {
         $votingSession->load([
-            'positions.candidates' => function($query) {
+            'positions.candidates' => function ($query) {
                 $query->withCount('votes')->orderBy('votes_count', 'desc');
             },
             'positions.candidates.student',
@@ -141,6 +163,11 @@ public function store(Request $request)
         return view('admin.sessions.show', compact('votingSession', 'totalVoters', 'totalVoted'));
     }
 
+    /**
+     * Manual status override — only for paused / cancelled / reinstating.
+     * Scheduled → Active → Completed transitions are handled by reschedule()
+     * and the Artisan cron.
+     */
     public function updateStatus(Request $request, VotingSession $votingSession)
     {
         $request->validate([
@@ -150,6 +177,49 @@ public function store(Request $request)
         $votingSession->update(['status' => $request->status]);
 
         return back()->with('success', 'Election status updated to "' . ucfirst($request->status) . '".');
+    }
+
+    /**
+     * Update start/end dates and immediately re-derive the DB status
+     * so the database stays consistent without waiting for the cron.
+     */
+    public function reschedule(Request $request, VotingSession $votingSession)
+    {
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date'   => 'required|date|after:start_date',
+        ]);
+
+        // Don't allow rescheduling cancelled/completed elections
+        if (in_array($votingSession->status, ['cancelled', 'completed'])) {
+            return back()->withErrors([
+                'start_date' => 'Cannot reschedule a ' . $votingSession->status . ' election.',
+            ]);
+        }
+
+        $now   = Carbon::now();
+        $start = Carbon::parse($request->start_date);
+        $end   = Carbon::parse($request->end_date);
+
+        // Derive the correct status from the new times.
+        // Paused stays paused — admin must resume it explicitly.
+        if ($votingSession->status === 'paused') {
+            $newStatus = 'paused';
+        } elseif ($now->lt($start)) {
+            $newStatus = 'scheduled';
+        } elseif ($now->between($start, $end)) {
+            $newStatus = 'active';
+        } else {
+            $newStatus = 'completed';
+        }
+
+        $votingSession->update([
+            'start_date' => $start,
+            'end_date'   => $end,
+            'status'     => $newStatus,
+        ]);
+
+        return back()->with('success', 'Schedule updated. Status automatically set to "' . ucfirst($newStatus) . '".');
     }
 
     public function candidates(VotingSession $votingSession)
@@ -210,7 +280,7 @@ public function store(Request $request)
         ]);
 
         $activeSemester = Semester::getCurrent();
-        $student = User::find($request->student_id);
+        $student        = User::find($request->student_id);
 
         if (!$activeSemester || !$student) {
             return back()->withErrors(['student_id' => 'Invalid student or no active semester.']);
@@ -253,23 +323,42 @@ public function store(Request $request)
         return back()->with('success', 'Position deleted.');
     }
 
+    /**
+     * Permanently delete a voting session and all its related data
+     * (positions, candidates, votes, participations cascade via FK).
+     * Active sessions cannot be deleted.
+     */
+    public function destroy(VotingSession $votingSession)
+    {
+        if ($votingSession->status === 'active') {
+            return back()->with('error', 'An active election cannot be deleted. Pause or cancel it first.');
+        }
+
+        $title = $votingSession->title;
+        $votingSession->delete();
+
+        return redirect()
+            ->route('admin.sessions.index')
+            ->with('success', '"' . $title . '" has been permanently deleted.');
+    }
+
     public function results(VotingSession $votingSession)
     {
-        $votingSession->load(['positions.candidates' => function($query) {
-            $query->withCount('votes')->orderBy('votes_count', 'desc');
-        }, 'positions.candidates.student']);
+        $votingSession->load([
+            'positions.candidates' => function ($query) {
+                $query->withCount('votes')->orderBy('votes_count', 'desc');
+            },
+            'positions.candidates.student',
+        ]);
 
         $results = $votingSession->positions->map(function ($position) {
             $totalVotes = $position->candidates->sum('votes_count');
 
             $candidates = $position->candidates->map(function ($candidate) use ($totalVotes) {
-                $voteCount  = $candidate->votes_count;
-                $percentage = $totalVotes > 0 ? round(($voteCount / $totalVotes) * 100, 2) : 0;
-
                 return [
                     'candidate'  => $candidate,
-                    'vote_count' => $voteCount,
-                    'percentage' => $percentage,
+                    'vote_count' => $candidate->votes_count,
+                    'percentage' => $totalVotes > 0 ? round(($candidate->votes_count / $totalVotes) * 100, 2) : 0,
                 ];
             })->sortByDesc('vote_count')->values();
 
@@ -296,9 +385,9 @@ public function store(Request $request)
         }
 
         $votingSession->load([
-            'positions.candidates' => function($query) {
+            'positions.candidates' => function ($query) {
                 $query->withCount('votes')->orderBy('votes_count', 'desc');
-            }
+            },
         ]);
 
         $totalVoted  = $votingSession->total_votes_cast;
@@ -314,7 +403,7 @@ public function store(Request $request)
 
             foreach ($position->candidates as $candidate) {
                 $candidates[$candidate->id] = $candidate->votes_count;
-                $percentage = $positionTotalVotes > 0
+                $percentage                 = $positionTotalVotes > 0
                     ? ($candidate->votes_count / $positionTotalVotes * 100)
                     : 0;
                 $progressBars[$candidate->id] = round($percentage, 1);
@@ -327,7 +416,7 @@ public function store(Request $request)
             'candidates'      => $candidates,
             'progress_bars'   => $progressBars,
             'position_totals' => $positionTotals,
-            'last_update'     => now()->toIso8601String()
+            'last_update'     => now()->toIso8601String(),
         ]);
     }
 }

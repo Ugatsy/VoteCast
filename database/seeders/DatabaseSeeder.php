@@ -20,21 +20,9 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // Election Admin
-        User::firstOrCreate(
-            ['email' => 'election@votecast.edu'],
-            [
-                'password'  => Hash::make('election123'),
-                'full_name' => 'Election Officer',
-                'role'      => 'election_admin',
-                'is_active' => true,
-            ]
-        );
-
         $this->command->info('');
-        $this->command->info('✅  Admin accounts ready:');
+        $this->command->info('✅  Admin account ready:');
         $this->command->info('   Super Admin    →  admin@votecast.edu     /  admin123');
-        $this->command->info('   Election Admin →  election@votecast.edu  /  election123');
         $this->command->info('');
     }
 }
