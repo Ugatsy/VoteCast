@@ -548,6 +548,65 @@
         </div>
 
         <div class="col-lg-8">
+
+            {{-- Upcoming Elections (Scheduled) --}}
+            @if(isset($upcomingSessions) && $upcomingSessions->count())
+                <div class="section-title mt-3">
+                    <span class="dot" style="background: #f59e0b;"></span>
+                    Upcoming Elections
+                    <span class="badge" style="background: #fef3c7; color: #b45309; font-size:0.7rem">Starts soon</span>
+                </div>
+
+                @foreach($upcomingSessions as $session)
+                    <div class="election-card mb-3" style="border-left: 4px solid #f59e0b;">
+                        <div class="accent-bar" style="width: 100%; background: #f59e0b;"></div>
+                        <div class="p-3">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                        <div style="font-weight:700;color:#1e293b;font-size:1rem">{{ $session->title }}</div>
+                                        @if($session->requires_release_code)
+                                            <span class="badge bg-warning text-dark" style="font-size:0.65rem">
+                                                <i class="bi bi-qr-code me-1"></i>Code Required
+                                            </span>
+                                        @endif
+                                    </div>
+                                    @if($session->description)
+                                        <div style="font-size:0.8rem;color:#64748b;margin-bottom:0.5rem">{{ Str::limit($session->description, 80) }}</div>
+                                    @endif
+                                    <div class="d-flex gap-3 flex-wrap">
+                                        <div style="font-size:0.75rem;color:#f59e0b; font-weight:500">
+                                            <i class="bi bi-calendar-clock me-1"></i>
+                                            Starts {{ $session->start_date->format('M d, Y h:i A') }}
+                                        </div>
+                                        <div style="font-size:0.75rem;color:#94a3b8">
+                                            <i class="bi bi-hourglass-split me-1"></i>
+                                            In {{ $session->start_date->diffForHumans() }}
+                                        </div>
+                                        <div style="font-size:0.75rem;color:#94a3b8">
+                                            <i class="bi bi-person-badge me-1"></i>{{ $session->positions->count() }} position(s)
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <button class="btn btn-warning btn-sm" style="background:#fef3c7; color:#b45309; border:none; border-radius:8px; padding:0.5rem 0.75rem; font-weight:600; font-size:0.8rem;" disabled>
+                                        <i class="bi bi-clock me-1"></i>Coming Soon
+                                    </button>
+                                </div>
+                            </div>
+
+                            {{-- Countdown timer for upcoming election --}}
+                            <div class="mt-2 pt-2 border-top">
+                                <div class="small text-muted d-flex align-items-center gap-2" style="font-size:0.7rem">
+                                    <i class="bi bi-info-circle"></i>
+                                    <span>Voting will open on <strong>{{ $session->start_date->format('l, F d, Y \a\t h:i A') }}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            @endif
+
             {{-- Available Elections --}}
             <div class="section-title">
                 <span class="dot dot-active"></span>

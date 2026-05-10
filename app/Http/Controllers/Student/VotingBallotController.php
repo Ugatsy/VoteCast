@@ -13,12 +13,39 @@ class VotingBallotController extends Controller
 {
     public function show(VotingSession $votingSession)
     {
-        if (!$votingSession->canVote(auth()->user())) {
+        $user = auth()->user();
+
+        // ✅ NEW: Check if election has started (for scheduled sessions)
+        if ($votingSession->status === 'scheduled' && now()->lt($votingSession->start_date)) {
+            $waitMinutes = now()->diffInMinutes($votingSession->start_date);
+            $waitHours = floor($waitMinutes / 60);
+            $remainMins = $waitMinutes % 60;
+
+            $timeMessage = '';
+            if ($waitHours > 0) {
+                $timeMessage = "{$waitHours} hour(s)";
+                if ($remainMins > 0) $timeMessage .= " and {$remainMins} minute(s)";
+            } else {
+                $timeMessage = "{$waitMinutes} minute(s)";
+            }
+
+            return redirect()->route('student.dashboard')
+                ->with('error', "This election starts in {$timeMessage} on " .
+                    $votingSession->start_date->format('M d, Y \a\t h:i A'));
+        }
+
+        // ✅ NEW: Check if election has ended
+        if ($votingSession->status === 'completed' || now()->gt($votingSession->end_date)) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'This election has already ended.');
+        }
+
+        if (!$votingSession->canVote($user)) {
             return redirect()->route('student.dashboard')
                 ->with('error', 'You are not eligible to vote in this election.');
         }
 
-        $alreadyVoted = auth()->user()->hasVotedInSession($votingSession->id);
+        $alreadyVoted = $user->hasVotedInSession($votingSession->id);
 
         if ($alreadyVoted && !$votingSession->allow_vote_changes) {
             return redirect()->route('student.dashboard')
@@ -73,11 +100,38 @@ class VotingBallotController extends Controller
 
         $votingSession = $releaseCode->votingSession;
 
+        // ✅ NEW: Check if election has started
+        if (now()->lt($votingSession->start_date)) {
+            $waitMinutes = now()->diffInMinutes($votingSession->start_date);
+            $waitHours = floor($waitMinutes / 60);
+            $remainMins = $waitMinutes % 60;
+
+            $timeMessage = '';
+            if ($waitHours > 0) {
+                $timeMessage = "{$waitHours} hour(s)";
+                if ($remainMins > 0) $timeMessage .= " and {$remainMins} minute(s)";
+            } else {
+                $timeMessage = "{$waitMinutes} minute(s)";
+            }
+
+            return redirect()->route('student.dashboard')
+                ->with('error', "This election has not started yet. Please wait {$timeMessage} until " .
+                    $votingSession->start_date->format('M d, Y h:i A'));
+        }
+
+        // ✅ NEW: Check if election has ended
+        if (now()->gt($votingSession->end_date)) {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'This election has already ended. You can no longer vote.');
+        }
+
+        // Check eligibility
         if (!$votingSession->canVote(auth()->user())) {
             return redirect()->route('student.dashboard')
                 ->with('error', 'You are not eligible to vote in this election.');
         }
 
+        // Check if already voted
         if (auth()->user()->hasVotedInSession($votingSession->id) && !$votingSession->allow_vote_changes) {
             return redirect()->route('student.dashboard')
                 ->with('error', 'You have already voted in this election.');

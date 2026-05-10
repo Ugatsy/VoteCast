@@ -22,23 +22,36 @@ class DashboardController extends Controller
             'section'    => $user->section
         ]);
 
+        // Get ALL sessions by status
+        $allScheduledSessions = VotingSession::where('status', 'scheduled')->get();
         $allActiveSessions = VotingSession::where('status', 'active')->get();
         $allCompletedSessions = VotingSession::where('status', 'completed')->get();
 
-        $eligibleSessions = collect();
-        foreach ($allActiveSessions as $session) {
-            if ($this->checkEligibility($session, $user)) {
-                $eligibleSessions->push($session);
+        // Filter eligible scheduled sessions
+        $eligibleScheduledSessions = collect();
+        foreach ($allScheduledSessions as $session) {
+            if ($this->checkEligibilityForAnyStatus($session, $user)) {
+                $eligibleScheduledSessions->push($session);
             }
         }
 
+        // Filter eligible active sessions
+        $eligibleActiveSessions = collect();
+        foreach ($allActiveSessions as $session) {
+            if ($this->checkEligibilityForAnyStatus($session, $user)) {
+                $eligibleActiveSessions->push($session);
+            }
+        }
+
+        // Filter eligible completed sessions
         $eligibleCompletedSessions = collect();
         foreach ($allCompletedSessions as $session) {
-            if ($this->checkEligibilityForCompleted($session, $user)) {
+            if ($this->checkEligibilityForAnyStatus($session, $user)) {
                 $eligibleCompletedSessions->push($session);
             }
         }
 
+        // Get sessions the student has already participated in
         $participatedSessionIds = Participation::where('user_id', $user->id)
             ->pluck('voting_session_id')
             ->toArray();
@@ -50,28 +63,38 @@ class DashboardController extends Controller
 
         $allDoneIds = array_unique(array_merge($participatedSessionIds, $votedSessionIds));
 
-        $pendingSessions = $eligibleSessions->filter(function ($session) use ($allDoneIds) {
+        // Scheduled sessions that are upcoming (not voted)
+        $upcomingSessions = $eligibleScheduledSessions->filter(function ($session) use ($allDoneIds) {
             return !in_array($session->id, $allDoneIds);
         })->values();
 
+        // Active sessions pending vote
+        $pendingSessions = $eligibleActiveSessions->filter(function ($session) use ($allDoneIds) {
+            return !in_array($session->id, $allDoneIds);
+        })->values();
+
+        // Active sessions already voted
         $votedActiveSessions = VotingSession::whereIn('id', $allDoneIds)
             ->where('status', 'active')
             ->with('positions')
             ->latest()
             ->get();
 
+        // Completed sessions
         $completedVotedSessions = VotingSession::whereIn('id', $allDoneIds)
             ->where('status', 'completed')
             ->with('positions')
             ->latest()
             ->get();
 
+        // Missed completed sessions
         $missedSessions = $eligibleCompletedSessions->filter(function ($session) use ($allDoneIds) {
             return !in_array($session->id, $allDoneIds);
         })->values();
 
         return view('student.dashboard', compact(
             'user',
+            'upcomingSessions',
             'pendingSessions',
             'votedActiveSessions',
             'completedVotedSessions',
@@ -94,9 +117,9 @@ class DashboardController extends Controller
             $isEligible = false;
 
             if ($session->status === 'active') {
-                $isEligible = $this->checkEligibility($session, $user);
+                $isEligible = $this->checkEligibilityForAnyStatus($session, $user);
             } elseif ($session->status === 'completed') {
-                $isEligible = $this->checkEligibilityForCompleted($session, $user);
+                $isEligible = $this->checkEligibilityForAnyStatus($session, $user);
             }
 
             if (!$isEligible) {
@@ -195,27 +218,10 @@ class DashboardController extends Controller
         }
     }
 
-    private function checkEligibility($session, $user)
-    {
-        if ($session->status !== 'active') {
-            return false;
-        }
-
-        switch ($session->category) {
-            case 'department':
-                return true;
-            case 'course':
-                return $session->target_course === $user->department;
-            case 'section':
-                return $session->target_section === $user->section;
-            case 'manual':
-                return $session->manualVoters()->where('user_id', $user->id)->exists();
-            default:
-                return false;
-        }
-    }
-
-    private function checkEligibilityForCompleted($session, $user)
+    /**
+     * Check eligibility for any session status (scheduled, active, or completed)
+     */
+    private function checkEligibilityForAnyStatus($session, $user)
     {
         switch ($session->category) {
             case 'department':
