@@ -10,8 +10,10 @@ use Illuminate\Support\Facades\Hash;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithStartRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Events\AfterImport;
 
-class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
+class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading, WithEvents
 {
     public UploadBatch $batch;
     private string $semester;
@@ -25,6 +27,11 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
     // student_code => true  (all codes already present for THIS semester+year)
     private array $existingEnrollments = [];
 
+    // Track whether we have already parsed the Period row from the first chunk.
+    // Row 5 (0-index 4) only appears in the first chunk; subsequent chunks only
+    // contain student rows, so we must not attempt to re-parse them.
+    private bool $periodParsed = false;
+
     public function __construct(UploadBatch $batch, string $semester, string $academicYear)
     {
         $this->batch        = $batch;
@@ -32,8 +39,6 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
         $this->academicYear = $academicYear;
 
         // Pre-load existing enrollments for this semester/year to detect true duplicates.
-        // NOTE: this is intentionally loaded AFTER parsePeriodRow() has run in collection(),
-        // so if the semester changes mid-import we reload it (see Step 1 below).
         $this->existingEnrollments = Enrollment::where('semester', $semester)
             ->where('academic_year', $academicYear)
             ->pluck('student_code')
@@ -43,6 +48,20 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
 
     public function startRow(): int  { return 1; }
     public function chunkSize(): int { return 200; }
+
+    // ── Event registration ────────────────────────────────────────────────────
+
+    public function registerEvents(): array
+    {
+        return [
+            // AfterImport fires once when ALL chunks have been processed.
+            // Syncing the semester here guarantees it runs exactly once,
+            // regardless of how many chunks the file produces.
+            AfterImport::class => function (AfterImport $event) {
+                $this->syncSemesterRecord();
+            },
+        ];
+    }
 
     // ── Semester helpers ──────────────────────────────────────────────────────
 
@@ -58,7 +77,6 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
 
         if (str_starts_with($lower, 'first')  || str_starts_with($lower, '1st')) return '1st Semester';
         if (str_starts_with($lower, 'second') || str_starts_with($lower, '2nd')) return '2nd Semester';
-        if (str_starts_with($lower, 'third')  || str_starts_with($lower, '3rd')) return '2nd Semester';
         if (str_starts_with($lower, 'summer'))                                    return 'Summer';
 
         return trim($raw);
@@ -67,24 +85,17 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
     /**
      * Parse Row 5 of the Excel into [semester, academicYear].
      *
-     * THE BUG THIS FIXES:
-     * Some files put the label and the value in SEPARATE cells:
-     *   col 0 = "Period"   col 1 = "Second Semester 2025-2026"
-     *
-     * The old code stopped at the first non-empty cell (col 0 = "Period"),
-     * failed to parse it as a semester string, and fell back to the constructor
-     * value — so "2nd Semester" was never detected.
-     *
-     * THE FIX:
-     * Collect ALL non-empty cells in the row, try each one individually,
-     * and also try concatenating adjacent pairs so that label+value spread
-     * across two cells is handled correctly.
-     *
      * Handles all known formats:
-     *   col0="Period"  col1="Second Semester 2025-2026"  ← your actual file
-     *   col0="First Semester 2025-2026"                  ← single-cell
-     *   col0="Period: 1st Semester 2025-2026"            ← colon-label in same cell
-     *   col0="Period"  col1="Summer 2025-2026"
+     *   col A = "Period"  col B = "Second Semester 2025-2026"  ← label + value in separate cells
+     *   col A = "First Semester 2025-2026"                     ← single-cell
+     *   col A = "Period: 1st Semester 2025-2026"               ← colon-label in same cell
+     *   col A = "Period"  col B = "Summer 2025-2026"
+     *
+     * Strategy:
+     *   Pass 1 – try each non-empty cell on its own after stripping any "Label:" prefix.
+     *            This catches "Second Semester 2025-2026" sitting in its own cell (col B).
+     *   Pass 2 – try concatenating adjacent cell pairs.
+     *            Fallback for unusual layouts where label and value are merged at read time.
      */
     private function parsePeriodRow($periodRow): array
     {
@@ -97,10 +108,10 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
             }
         }
 
-        $semesterPattern = '/^((?:First|Second|Third|Summer|1st|2nd|3rd)(?:\s+Semester)?)\s+(\d{4}-\d{4})$/i';
+        // Pattern: "First Semester 2025-2026", "2nd Semester 2024-2025", "Summer 2025-2026", etc.
+        $semesterPattern = '/^((?:First|Second|Summer|1st|2nd)(?:\s+Semester)?)\s+(\d{4}-\d{4})$/i';
 
-        // Pass 1: try each cell individually
-        // Strip an optional "Label:" prefix (e.g. "Period: First Semester 2025-2026")
+        // Pass 1: try each cell individually after stripping an optional "Label:" prefix.
         foreach ($cells as $cell) {
             $cleaned = trim(preg_replace('/^[^:]+:\s*/i', '', $cell));
             if (preg_match($semesterPattern, $cleaned, $m)) {
@@ -108,9 +119,19 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
             }
         }
 
-        // Pass 2: try concatenating adjacent cell pairs
-        // Catches: col0="Period"  col1="Second Semester 2025-2026"
+        // Pass 2: try concatenating adjacent cell pairs.
+        // Example: cells = ["Period", "Second Semester 2025-2026"]
+        //          combined = "Period Second Semester 2025-2026"
+        //          after stripping non-colon label prefix this still won't match,
+        //          BUT the adjacent-pair loop also tries col1 alone, so this is
+        //          really just a belt-and-suspenders layer for merged-cell exports.
         for ($i = 0; $i < count($cells) - 1; $i++) {
+            // Try the right-hand cell of the pair directly (covers "Period" | value splits)
+            $right = trim($cells[$i + 1]);
+            if (preg_match($semesterPattern, $right, $m)) {
+                return [$this->normaliseSemesterName($m[1]), $m[2]];
+            }
+            // Also try the full concatenation with colon-strip
             $combined = $cells[$i] . ' ' . $cells[$i + 1];
             $cleaned  = trim(preg_replace('/^[^:]+:\s*/i', '', $combined));
             if (preg_match($semesterPattern, $cleaned, $m)) {
@@ -123,54 +144,53 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
     }
 
     /**
-     * Sync the semester record to the database
-     * This creates or updates the semester and sets it as active
+     * Create or activate the semester record in the database.
+     * Called once via AfterImport event after all chunks are processed.
      */
     private function syncSemesterRecord(): void
     {
         try {
-            // First, deactivate all existing semesters
+            // Deactivate all existing semesters
             Semester::where('is_active', true)->update(['is_active' => false]);
-            
-            // Check if semester already exists with this name and academic year
+
             $semester = Semester::where('name', $this->semester)
                 ->where('academic_year', $this->academicYear)
                 ->first();
-            
+
             if (!$semester) {
-                // Create new semester record
                 $semester = new Semester();
-                $semester->name = $this->semester;
+                $semester->name          = $this->semester;
                 $semester->academic_year = $this->academicYear;
-                
-                // Set sensible date ranges based on academic year and semester
-                $year = explode('-', $this->academicYear)[0];
-                
+
+                // Set sensible date ranges based on the academic year
+                [$startYear] = explode('-', $this->academicYear);
+                $startYear   = (int) $startYear;
+
                 if ($this->semester === '1st Semester') {
-                    $semester->start_date = date('Y-m-d', strtotime("{$year}-08-01"));
-                    $semester->end_date = date('Y-m-d', strtotime("{$year}-12-15"));
+                    $semester->start_date = date('Y-m-d', mktime(0, 0, 0, 8,  1, $startYear));
+                    $semester->end_date   = date('Y-m-d', mktime(0, 0, 0, 12, 15, $startYear));
                 } elseif ($this->semester === '2nd Semester') {
-                    $semester->start_date = date('Y-m-d', strtotime(($year + 1) . "-01-01"));
-                    $semester->end_date = date('Y-m-d', strtotime(($year + 1) . "-05-31"));
-                } elseif ($this->semester === 'Summer') {
-                    $semester->start_date = date('Y-m-d', strtotime(($year + 1) . "-06-01"));
-                    $semester->end_date = date('Y-m-d', strtotime(($year + 1) . "-07-31"));
+                    $semester->start_date = date('Y-m-d', mktime(0, 0, 0, 1, 1,  $startYear + 1));
+                    $semester->end_date   = date('Y-m-d', mktime(0, 0, 0, 5, 31, $startYear + 1));
+                } else { // Summer
+                    $semester->start_date = date('Y-m-d', mktime(0, 0, 0, 6, 1,  $startYear + 1));
+                    $semester->end_date   = date('Y-m-d', mktime(0, 0, 0, 7, 31, $startYear + 1));
                 }
             }
-            
+
             $semester->is_active = true;
             $semester->save();
-            
-            \Log::info('Semester synced successfully', [
-                'semester' => $this->semester,
+
+            \Log::info('Semester synced', [
+                'semester'      => $this->semester,
                 'academic_year' => $this->academicYear,
-                'semester_id' => $semester->id
+                'id'            => $semester->id,
             ]);
-            
+
         } catch (\Exception $e) {
-            \Log::error('Failed to sync semester record: ' . $e->getMessage(), [
-                'semester' => $this->semester,
-                'academic_year' => $this->academicYear
+            \Log::error('Failed to sync semester: ' . $e->getMessage(), [
+                'semester'      => $this->semester,
+                'academic_year' => $this->academicYear,
             ]);
         }
     }
@@ -179,35 +199,53 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
 
     public function collection(Collection $rows): void
     {
-        // ── Step 1: Parse Period from Row 5 (0-index 4) ──────────────────────
-        $periodRow = $rows->get(4);
-        if ($periodRow) {
-            $previousSemester     = $this->semester;
-            $previousAcademicYear = $this->academicYear;
+        // ── Step 1: Parse Period from Row 5 — first chunk only ────────────────
+        // Row 5 (0-index 4) is only present in the first chunk. On subsequent
+        // chunks index 4 would point to a student row, which must not be parsed
+        // as a semester descriptor.
+        if (!$this->periodParsed) {
+            $periodRow = $rows->get(4);
+            if ($periodRow) {
+                $previousSemester     = $this->semester;
+                $previousAcademicYear = $this->academicYear;
 
-            [$this->semester, $this->academicYear] = $this->parsePeriodRow($periodRow);
+                [$this->semester, $this->academicYear] = $this->parsePeriodRow($periodRow);
 
-            // If the semester/year changed (Excel says something different from the
-            // form's hidden fields), reload the duplicate-detection cache so it
-            // matches the actual target semester.
-            if ($this->semester !== $previousSemester || $this->academicYear !== $previousAcademicYear) {
-                $this->existingEnrollments = Enrollment::where('semester', $this->semester)
-                    ->where('academic_year', $this->academicYear)
-                    ->pluck('student_code')
-                    ->flip()
-                    ->toArray();
+                // If the parsed semester differs from the form value, reload the
+                // duplicate-detection cache so it matches the actual target semester.
+                if ($this->semester !== $previousSemester || $this->academicYear !== $previousAcademicYear) {
+                    $this->existingEnrollments = Enrollment::where('semester', $this->semester)
+                        ->where('academic_year', $this->academicYear)
+                        ->pluck('student_code')
+                        ->flip()
+                        ->toArray();
+                }
             }
+            $this->periodParsed = true;
         }
 
         // ── Step 2: Student rows start at row 9 (0-index = 8) ────────────────
-        $studentRows = $rows->slice(8);
+        // On the first chunk, rows 0–7 are header rows; slice from index 8.
+        // On subsequent chunks, ALL rows are student data — slice(0) is a no-op.
+        $studentRows = $this->periodParsed && $rows->count() > 8
+            ? $rows->slice(8)   // first chunk: skip header rows
+            : $rows;            // subsequent chunks: all rows are students
+        // Note: after the first collection() call, periodParsed is true, so
+        // subsequent chunks go to the else branch and process all their rows.
+        // We detect "first chunk" by checking whether row 0 looks like a header.
+        $firstCell = trim((string) ($rows->first()[0] ?? ''));
+        $isHeaderChunk = in_array(strtolower($firstCell), [
+            'aldersgate college', 'enrollment list', 'no', 'period', 'course',
+        ]) || !is_numeric($firstCell);
+        $studentRows = $isHeaderChunk ? $rows->slice(8) : $rows;
 
         // ── Step 3: Chunk processing ──────────────────────────────────────────
         foreach ($studentRows->chunk(100) as $chunk) {
 
             $codesInChunk = $chunk
                 ->filter(fn($row) => !empty(trim((string) ($row[1] ?? ''))))
-                ->map(fn($row)    => trim((string) $row[1]))
+                ->map(fn($row)    => $this->cleanStudentCode(trim((string) $row[1])))
+                ->filter()
                 ->values()
                 ->toArray();
 
@@ -231,12 +269,13 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
 
             foreach ($chunk as $row) {
                 // Column map (0-indexed) — works for 10-column AND 17-column files;
-                // columns 10+ (Email, Contact No, etc.) are intentionally ignored.
-                $studentCode = trim((string) ($row[1] ?? ''));
+                // columns 10+ (Email, Contact No, Birth Date, etc.) are ignored.
+                $rawCode     = trim((string) ($row[1] ?? ''));
+                $studentCode = $this->cleanStudentCode($rawCode);
                 if (empty($studentCode)) continue;
 
-                $lastName   = trim((string) ($row[2] ?? ''));
-                $firstName  = trim((string) ($row[3] ?? ''));
+                $lastName   = $this->cleanName(trim((string) ($row[2] ?? '')));
+                $firstName  = $this->cleanName(trim((string) ($row[3] ?? '')));
                 $middleName = trim((string) ($row[4] ?? ''));
                 $sex        = strtoupper(trim((string) ($row[5] ?? 'M')));
                 $course     = trim((string) ($row[6] ?? ''));
@@ -387,16 +426,34 @@ class EnrollmentImport implements ToCollection, WithStartRow, WithChunkReading
             unset($toInsertEnrollments, $toInsertUsers, $codesInChunk, $existingUserCodes, $existingAnyEnrollment);
         }
 
-        // ── Sync the semester record to database ──────────────────────────────
-        $this->syncSemesterRecord();
-
         // ── Write final stats to the batch record ─────────────────────────────
+        // (syncSemesterRecord is called once via AfterImport event, not here)
         $this->batch->update([
             'imported_records' => $this->imported + $this->updated,
             'skipped_records'  => $this->skipped,
             'errors'           => $this->errors,
             'courses'          => array_values($this->courses),
         ]);
+    }
+
+    // ── String cleaners ───────────────────────────────────────────────────────
+
+    /**
+     * Strip leading asterisks and whitespace from student codes.
+     * Some exports mark irregular students with "****" prefixes e.g. "**** Aquino".
+     * This is on the name column but occasionally bleeds into the code column too.
+     */
+    private function cleanStudentCode(string $raw): string
+    {
+        return trim(ltrim($raw, '* '));
+    }
+
+    /**
+     * Strip leading asterisks from name fields (irregular student markers).
+     */
+    private function cleanName(string $raw): string
+    {
+        return trim(ltrim($raw, '* '));
     }
 
     // ── Getters ───────────────────────────────────────────────────────────────
