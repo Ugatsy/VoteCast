@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\VotingSession;
+use Illuminate\Http\Request;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -385,5 +386,83 @@ class ExportController extends Controller
             'Content-Type'        => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
+    }
+
+    /**
+     * Export voters list to CSV
+     */
+    public function exportVoters(VotingSession $votingSession, Request $request)
+    {
+        $voters = $votingSession->getEligibleVotersWithStatus();
+
+        // Apply filters
+        if ($request->filled('status')) {
+            $voters = array_filter($voters, function ($voter) use ($request) {
+                return ($voter['status'] ?? null) === $request->status;
+            });
+        }
+
+        if ($request->filled('search')) {
+            $search = strtolower($request->search);
+
+            $voters = array_filter($voters, function ($voter) use ($search) {
+                return strpos(strtolower($voter['full_name'] ?? ''), $search) !== false
+                    || strpos(strtolower($voter['student_id'] ?? ''), $search) !== false;
+            });
+        }
+
+        $voters = array_values($voters);
+
+        $filename = "voters-{$votingSession->id}-" . date('Ymd_His') . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'private',
+            'Pragma'              => 'private',
+        ];
+
+        $callback = function () use ($voters) {
+            $file = fopen('php://output', 'w');
+
+            // Add UTF-8 BOM for Excel compatibility
+            fputs($file, "\xEF\xBB\xBF");
+
+            // Headers
+            fputcsv($file, [
+                'Student ID',
+                'Full Name',
+                'Course',
+                'Year Level',
+                'Section',
+                'Status',
+                'Voted At',
+            ]);
+
+            foreach ($voters as $voter) {
+                $statusText = match ($voter['status'] ?? null) {
+                    'voted' => 'Voted',
+                    'abstained' => 'Abstained (No Votes)',
+                    'not_voted' => 'Not Voted',
+                    default => ucfirst((string) ($voter['status'] ?? '')),
+                };
+
+                fputcsv($file, [
+                    $voter['student_id'] ?? '',
+                    $voter['full_name'] ?? '',
+                    $voter['department'] ?? '',
+                    $voter['year_level'] ?? '',
+                    $voter['section'] ?? '',
+                    $statusText,
+                    $voter['voted_at']
+                        ? date('Y-m-d H:i:s', strtotime((string) $voter['voted_at']))
+                        : '',
+                ]);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 }

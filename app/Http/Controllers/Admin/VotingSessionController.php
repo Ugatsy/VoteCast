@@ -419,4 +419,50 @@ class VotingSessionController extends Controller
             'last_update'     => now()->toIso8601String(),
         ]);
     }
+
+    /**
+     * Get voters list with status (AJAX endpoint)
+     */
+    public function getVoters(VotingSession $votingSession, Request $request)
+    {
+        $voters = $votingSession->getEligibleVotersWithStatus();
+
+        // Apply filters
+        if ($request->filled('status')) {
+            $status = (string) $request->status;
+            $voters = array_values(array_filter($voters, function ($voter) use ($status) {
+                return ($voter['status'] ?? null) === $status;
+            }));
+        }
+
+        if ($request->filled('search')) {
+            $search = strtolower((string) $request->search);
+            $voters = array_values(array_filter($voters, function ($voter) use ($search) {
+                $fullName   = strtolower((string) ($voter['full_name'] ?? ''));
+                $studentId  = strtolower((string) ($voter['student_id'] ?? ''));
+                return str_contains($fullName, $search) || str_contains($studentId, $search);
+            }));
+        }
+
+        // Paginate (manual array pagination)
+        $perPage = 20;
+        $currentPage = (int) $request->get('page', 1);
+        if ($currentPage < 1) $currentPage = 1;
+
+        $total = count($voters);
+        $lastPage = (int) max(1, ceil($total / $perPage));
+
+        if ($currentPage > $lastPage) $currentPage = $lastPage;
+
+        $offset = ($currentPage - 1) * $perPage;
+        $paged = array_slice($voters, $offset, $perPage);
+
+        return response()->json([
+            'voters' => $paged,
+            'total' => $total,
+            'current_page' => $currentPage,
+            'last_page' => $lastPage,
+            'statistics' => $votingSession->vote_statistics,
+        ]);
+    }
 }

@@ -397,7 +397,130 @@
     font-size: 0.78rem;
     min-height: 1.1em;
 }
+
+/* ── Voter Tracking UI ─────────────────────────────────────────────── */
+.voter-tracking-table td, .voter-tracking-table th { vertical-align: middle; }
 </style>
+
+{{-- Voter Tracking Section --}}
+<div class="card border-0 shadow-sm mt-4" style="border-radius:10px">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <strong><i class="bi bi-people me-2 text-primary"></i>Voter Tracking</strong>
+            <span class="text-muted ms-2 small">Track who has voted and who hasn't</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-primary" id="refreshVotersBtn" type="button">
+                <i class="bi bi-arrow-repeat me-1"></i>Refresh
+            </button>
+            <button class="btn btn-sm btn-outline-success" id="exportVotersBtn" type="button">
+                <i class="bi bi-download me-1"></i>Export CSV
+            </button>
+        </div>
+    </div>
+
+    <div class="card-body">
+        {{-- Statistics Cards --}}
+        <div class="row g-3 mb-4" id="voterStats">
+            <div class="col-md-3">
+                <div class="stat-card text-center p-3">
+                    <div class="stat-label text-muted mb-1">Eligible Voters</div>
+                    <div class="stat-value text-primary h2 mb-0" id="statEligible">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center p-3">
+                    <div class="stat-label text-muted mb-1">Voted</div>
+                    <div class="stat-value text-success h2 mb-0" id="statVoted">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center p-3">
+                    <div class="stat-label text-muted mb-1">Abstained</div>
+                    <div class="stat-value text-warning h2 mb-0" id="statAbstained">0</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center p-3">
+                    <div class="stat-label text-muted mb-1">Not Voted</div>
+                    <div class="stat-value text-danger h2 mb-0" id="statNotVoted">0</div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Turnout Progress Bar --}}
+        <div class="mb-4">
+            <div class="d-flex justify-content-between small mb-1">
+                <span>Voter Turnout</span>
+                <span class="fw-bold" id="turnoutPercentage">0%</span>
+            </div>
+            <div class="progress" style="height: 8px; border-radius: 4px;">
+                <div class="progress-bar bg-success" id="turnoutBar" style="width: 0%; border-radius: 4px;"></div>
+            </div>
+        </div>
+
+        {{-- Filters --}}
+        <div class="row g-2 mb-3">
+            <div class="col-md-4">
+                <select id="statusFilter" class="form-select form-select-sm">
+                    <option value="">All Status</option>
+                    <option value="voted">✓ Voted</option>
+                    <option value="abstained">⚠️ Abstained (No Votes)</option>
+                    <option value="not_voted">✗ Not Voted</option>
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <div class="input-group input-group-sm">
+                    <input type="text" id="searchVoter" class="form-control" placeholder="Search by name or student ID...">
+                    <button class="btn btn-outline-primary" id="searchBtn" type="button">
+                        <i class="bi bi-search"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary" id="clearFiltersBtn" type="button" style="display:none;">
+                        <i class="bi bi-x"></i> Clear
+                    </button>
+                </div>
+            </div>
+
+            <div class="col-md-2 text-end">
+                <span class="small text-muted" id="voterCount"></span>
+            </div>
+        </div>
+
+        {{-- Voters Table --}}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0 voter-tracking-table" id="votersTable">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 15%">Student ID</th>
+                        <th style="width: 25%">Full Name</th>
+                        <th style="width: 15%">Course</th>
+                        <th style="width: 10%">Year</th>
+                        <th style="width: 15%">Section</th>
+                        <th style="width: 10%">Status</th>
+                        <th style="width: 10%">Voted At</th>
+                    </tr>
+                </thead>
+                <tbody id="votersTableBody">
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                            Loading voters...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        {{-- Pagination --}}
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <div class="small text-muted" id="paginationInfo"></div>
+            <nav>
+                <ul class="pagination pagination-sm mb-0" id="pagination"></ul>
+            </nav>
+        </div>
+    </div>
+</div>
 
 @endsection
 
@@ -694,5 +817,283 @@ document.addEventListener('DOMContentLoaded', () => {
     const voteMonitor = new VoteMonitor({{ $votingSession->id }});
     window.addEventListener('beforeunload', () => { if (voteMonitor) voteMonitor.stop(); });
 });
+
+/**
+ * ── Voter Tracking (AJAX + filters + pagination + export) ──────────────
+ * Uses fetch() (no jQuery dependency).
+ */
+(function () {
+    const sessionId = {{ $votingSession->id }};
+
+    const votersTableBody = document.getElementById('votersTableBody');
+    const statEligible     = document.getElementById('statEligible');
+    const statVoted        = document.getElementById('statVoted');
+    const statAbstained    = document.getElementById('statAbstained');
+    const statNotVoted     = document.getElementById('statNotVoted');
+
+    const turnoutPercentage = document.getElementById('turnoutPercentage');
+    const turnoutBar        = document.getElementById('turnoutBar');
+
+    const voterCountEl     = document.getElementById('voterCount');
+
+    const statusFilter = document.getElementById('statusFilter');
+    const searchVoter  = document.getElementById('searchVoter');
+
+    const paginationInfo = document.getElementById('paginationInfo');
+    const paginationUl   = document.getElementById('pagination');
+
+    const refreshBtn = document.getElementById('refreshVotersBtn');
+    const exportBtn  = document.getElementById('exportVotersBtn');
+    const searchBtn  = document.getElementById('searchBtn');
+    const clearBtn   = document.getElementById('clearFiltersBtn');
+
+    let currentPage   = 1;
+    let currentStatus = '';
+    let currentSearch = '';
+    let totalPages    = 1;
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>]/g, function (m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '<';
+            if (m === '>') return '>';
+            return m;
+        });
+    }
+
+    function updatePagination(current, total) {
+        if (!paginationUl) return;
+
+        if (total <= 1) {
+            paginationUl.innerHTML = '';
+            paginationInfo && (paginationInfo.textContent = '');
+            return;
+        }
+
+        let html = '';
+
+        // Prev
+        if (current > 1) {
+            html += `<li class="page-item"><a class="page-link" href="#" data-page="${current - 1}">« Prev</a></li>`;
+        } else {
+            html += `<li class="page-item disabled"><span class="page-link">« Prev</span></li>`;
+        }
+
+        // Pages
+        const startPage = Math.max(1, current - 2);
+        const endPage   = Math.min(total, current + 2);
+
+        for (let i = startPage; i <= endPage; i++) {
+            if (i === current) {
+                html += `<li class="page-item active"><span class="page-link">${i}</span></li>`;
+            } else {
+                html += `<li class="page-item"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+            }
+        }
+
+        // Next
+        if (current < total) {
+            html += `<li class="page-item"><a class="page-link" href="#" data-page="${current + 1}">Next »</a></li>`;
+        } else {
+            html += `<li class="page-item disabled"><span class="page-link">Next »</span></li>`;
+        }
+
+        paginationUl.innerHTML = html;
+
+        paginationUl.querySelectorAll('a[data-page]').forEach(a => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = parseInt(a.getAttribute('data-page'), 10);
+                if (Number.isFinite(page)) {
+                    currentPage = page;
+                    loadVoters();
+                }
+            });
+        });
+
+        paginationInfo && (paginationInfo.textContent = `Page ${current} of ${total}`);
+    }
+
+    async function loadVoters() {
+        if (!votersTableBody) return;
+
+        votersTableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted py-4">
+                    <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                    Loading voters...
+                </td>
+            </tr>
+        `;
+
+        const params = new URLSearchParams();
+        params.set('page', String(currentPage));
+        if (currentStatus) params.set('status', currentStatus);
+        if (currentSearch) params.set('search', currentSearch);
+
+        const url = `/admin/sessions/${sessionId}/voters?${params.toString()}`;
+
+        try {
+            const res = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!res.ok) {
+                const text = await res.text().catch(() => '');
+                throw new Error(`Request failed: ${res.status} ${res.statusText}. ${text}`);
+            }
+
+            const response = await res.json();
+
+            if (response.statistics) {
+                statEligible && (statEligible.textContent = Number(response.statistics.eligible).toLocaleString());
+                statVoted && (statVoted.textContent = Number(response.statistics.voted).toLocaleString());
+                statAbstained && (statAbstained.textContent = Number(response.statistics.abstained).toLocaleString());
+                statNotVoted && (statNotVoted.textContent = Number(response.statistics.not_voted).toLocaleString());
+
+                if (turnoutPercentage) {
+                    const pct = response.statistics.turnout_percentage ?? 0;
+                    turnoutPercentage.textContent = `${Number(pct).toFixed(2)}%`;
+                }
+                if (turnoutBar && response.statistics.turnout_percentage !== undefined) {
+                    const pct = Math.max(0, Math.min(100, Number(response.statistics.turnout_percentage)));
+                    turnoutBar.style.width = `${pct}%`;
+                }
+            }
+
+            const voters = response.voters || [];
+            const total  = response.total ?? 0;
+
+            if (voterCountEl) {
+                voterCountEl.textContent = `Showing ${voters.length} of ${total} voters`;
+            }
+
+            if (voters.length > 0) {
+                let html = '';
+                voters.forEach(voter => {
+                    let statusBadge = '';
+                    switch (voter.status) {
+                        case 'voted':
+                            statusBadge = `<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Voted</span>`;
+                            break;
+                        case 'abstained':
+                            statusBadge = `<span class="badge bg-warning text-dark"><i class="bi bi-eye-slash me-1"></i>Abstained</span>`;
+                            break;
+                        case 'not_voted':
+                        default:
+                            statusBadge = `<span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Not Voted</span>`;
+                            break;
+                    }
+
+                    const votedAt = voter.voted_at ? new Date(voter.voted_at).toLocaleString() : '-';
+
+                    html += `
+                        <tr>
+                            <td><code class="small">${escapeHtml(voter.student_id)}</code></td>
+                            <td class="fw-medium">${escapeHtml(voter.full_name)}</td>
+                            <td class="small">${escapeHtml(voter.department)}</td>
+                            <td class="small">${escapeHtml(voter.year_level)}</td>
+                            <td class="small">${escapeHtml(voter.section)}</td>
+                            <td>${statusBadge}</td>
+                            <td class="small text-muted">${escapeHtml(votedAt)}</td>
+                        </tr>
+                    `;
+                });
+
+                votersTableBody.innerHTML = html;
+            } else {
+                votersTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+                            No voters found.
+                        </td>
+                    </tr>
+                `;
+            }
+
+            const lastPage = response.last_page ?? 1;
+            totalPages = lastPage;
+            updatePagination(response.current_page ?? 1, lastPage);
+        } catch (err) {
+            console.error('Error loading voters:', err);
+            votersTableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-danger py-4">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Failed to load voters. Please try again.
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    function applyFiltersFromUI() {
+        currentStatus = statusFilter ? (statusFilter.value || '') : '';
+        currentSearch = searchVoter ? (searchVoter.value || '').trim() : '';
+    }
+
+    // Bind events
+    if (refreshBtn) refreshBtn.addEventListener('click', () => loadVoters());
+
+    if (statusFilter) {
+        statusFilter.addEventListener('change', () => {
+            applyFiltersFromUI();
+            currentPage = 1;
+            loadVoters();
+        });
+    }
+
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            applyFiltersFromUI();
+            currentPage = 1;
+            loadVoters();
+        });
+    }
+
+    if (searchVoter) {
+        searchVoter.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyFiltersFromUI();
+                currentPage = 1;
+                loadVoters();
+            }
+        });
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            if (statusFilter) statusFilter.value = '';
+            if (searchVoter) searchVoter.value = '';
+            currentStatus = '';
+            currentSearch = '';
+            currentPage = 1;
+            clearBtn.style.display = 'none';
+            loadVoters();
+        });
+    }
+
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+            applyFiltersFromUI();
+
+            const params = new URLSearchParams();
+            if (currentStatus) params.set('status', currentStatus);
+            if (currentSearch) params.set('search', currentSearch);
+
+            window.location.href = `/admin/sessions/${sessionId}/voters/export${params.toString() ? '?' + params.toString() : ''}`;
+        });
+    }
+
+    // initial load
+    loadVoters();
+})();
 </script>
 @endpush

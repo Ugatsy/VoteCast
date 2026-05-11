@@ -219,6 +219,9 @@ class VotingBallotController extends Controller
 
             DB::commit();
 
+            // Clear cached voter totals/stats so voter tracking updates in near real-time
+            $votingSession->clearVoterCache();
+
             session()->forget("release_code_validated_{$votingSession->id}");
 
             return redirect()->route('student.confirmation')

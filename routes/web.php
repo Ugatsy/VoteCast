@@ -96,6 +96,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/sessions/{votingSession}/export/excel', [Admin\ExportController::class, 'exportExcel'])->name('sessions.export.excel');
         Route::get('/sessions/{votingSession}/export/docx', [Admin\ExportController::class, 'exportDocx'])->name('sessions.export.docx');
 
+        // ── Voter Tracking (AJAX + CSV Export) ────────────────────────────────
+        Route::get('/sessions/{votingSession}/voters', [Admin\VoterTrackingController::class, 'getVoters'])
+            ->name('sessions.voters');
+        Route::get('/sessions/{votingSession}/voters/export', [Admin\VoterTrackingController::class, 'exportVoters'])
+            ->name('sessions.voters.export');
+
         // ── Positions & Candidates Management ───────────────────────────────────
         Route::get('/sessions/{votingSession}/candidates', [Admin\VotingSessionController::class, 'candidates'])->name('sessions.candidates');
         Route::post('/sessions/{votingSession}/positions', [Admin\VotingSessionController::class, 'addPosition'])->name('sessions.positions.add');

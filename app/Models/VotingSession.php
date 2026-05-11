@@ -89,28 +89,32 @@ class VotingSession extends Model
 
     public function getTotalVotersAttribute(): int
     {
-        if ($this->category === 'manual') {
-            return $this->manualVoters()->count();
-        }
+        $cacheKey = "session_total_voters_{$this->id}";
 
-        $query = User::students()->active();
+        return \Cache::remember($cacheKey, 300, function () {
+            if ($this->category === 'manual') {
+                return $this->manualVoters()->count();
+            }
 
-        // Filter by active semester
-        $activeSemester = Semester::getCurrent();
-        if ($activeSemester) {
-            $query->where('semester', $activeSemester->name)
-                  ->where('academic_year', $activeSemester->academic_year);
-        }
+            $query = User::students()->active();
 
-        if ($this->category === 'course' && $this->target_course) {
-            $query->where('department', $this->target_course);
-        } elseif ($this->category === 'section' && $this->target_section) {
-            $query->where('section', $this->target_section);
-        } elseif ($this->category === 'department' && $this->target_department) {
-            $query->where('department', $this->target_department);
-        }
+            // Filter by active semester
+            $activeSemester = Semester::getCurrent();
+            if ($activeSemester) {
+                $query->where('semester', $activeSemester->name)
+                    ->where('academic_year', $activeSemester->academic_year);
+            }
 
-        return $query->count();
+            if ($this->category === 'course' && $this->target_course) {
+                $query->where('department', $this->target_course);
+            } elseif ($this->category === 'section' && $this->target_section) {
+                $query->where('section', $this->target_section);
+            } elseif ($this->category === 'department' && $this->target_department) {
+                $query->where('department', $this->target_department);
+            }
+
+            return $query->count();
+        });
     }
 
     public function getTotalVotesCastAttribute(): int
@@ -184,5 +188,112 @@ class VotingSession extends Model
         }
 
         return ReleaseCode::verifyCode($this->id, $code);
+    }
+
+    /**
+     * Clear cached voter totals/stats for this session.
+     */
+    public function clearVoterCache(): void
+    {
+        \Cache::forget("session_total_voters_{$this->id}");
+        \Cache::forget("session_stats_{$this->id}");
+
+        // Clear controller cache keys as well
+        \App\Http\Controllers\Admin\VoterTrackingController::clearCache((int) $this->id);
+    }
+
+    /**
+     * Get eligible voters for this session with their voting status.
+     */
+    public function getEligibleVotersWithStatus(): array
+    {
+        $query = User::students()->active();
+
+        // Filter by active semester
+        $activeSemester = Semester::getCurrent();
+        if ($activeSemester) {
+            $query->where('semester', $activeSemester->name)
+                ->where('academic_year', $activeSemester->academic_year);
+        }
+
+        // Apply category filters
+        if ($this->category === 'course' && $this->target_course) {
+            $query->where('department', $this->target_course);
+        } elseif ($this->category === 'section' && $this->target_section) {
+            $query->where('section', $this->target_section);
+        } elseif ($this->category === 'department' && $this->target_department) {
+            $query->where('department', $this->target_department);
+        } elseif ($this->category === 'manual') {
+            $manualVoterIds = $this->manualVoters()->pluck('user_id');
+            $query->whereIn('id', $manualVoterIds);
+        }
+
+        $eligibleVoters = $query->get();
+
+        // Get users who have voted (via participations)
+        $votedUserIds = $this->participations()
+            ->where('has_votes', true)
+            ->pluck('user_id')
+            ->toArray();
+
+        // Get users who have abstained (participated but no votes)
+        $abstainedUserIds = $this->participations()
+            ->where('has_votes', false)
+            ->pluck('user_id')
+            ->toArray();
+
+        $votersWithStatus = [];
+        foreach ($eligibleVoters as $voter) {
+            $status = 'not_voted';
+
+            if (in_array($voter->id, $votedUserIds, true)) {
+                $status = 'voted';
+            } elseif (in_array($voter->id, $abstainedUserIds, true)) {
+                $status = 'abstained';
+            }
+
+            $votedAt = $this->participations()
+                ->where('user_id', $voter->id)
+                ->where('has_votes', true)
+                ->value('voted_at');
+
+            $votersWithStatus[] = [
+                'id' => $voter->id,
+                'student_id' => $voter->student_id,
+                'full_name' => $voter->full_name,
+                'department' => $voter->department,
+                'year_level' => $voter->year_level,
+                'section' => $voter->section,
+                'status' => $status,
+                'voted_at' => $votedAt,
+            ];
+        }
+
+        return $votersWithStatus;
+    }
+
+    /**
+     * Get vote statistics summary.
+     */
+    public function getVoteStatisticsAttribute(): array
+    {
+        $eligibleCount = $this->total_voters;
+        $votedCount = $this->total_votes_cast;
+
+        $abstainedCount = $this->participations()
+            ->where('has_votes', false)
+            ->count();
+
+        $notVotedCount = $eligibleCount - $votedCount - $abstainedCount;
+
+        return [
+            'eligible' => $eligibleCount,
+            'voted' => $votedCount,
+            'abstained' => $abstainedCount,
+            'not_voted' => $notVotedCount,
+            'turnout_percentage' => $eligibleCount > 0
+                ? round(($votedCount / $eligibleCount) * 100, 2)
+                : 0,
+        ];
     }
 }

@@ -1,9 +1,30 @@
-- [x] Replace `resources/views/admin/dashboard.blade.php` with provided dashboard template
-- [ ] Replace `resources/views/admin/sessions/index.blade.php` with provided sessions index template
-- [x] Replace `resources/views/admin/sessions/candidates.blade.php` with provided candidates template
-- [x] Replace `resources/views/admin/sessions/results.blade.php` with provided results template
-- [x] Replace `resources/views/admin/enrollment/index.blade.php` with provided enrollment index template
+# TODO - Voter Tracking Feature (VoteCast)
 
+## Step 1 — Backend: VotingSession model
+- [x] Add `getEligibleVotersWithStatus(): array`
+- [x] Add `getVoteStatisticsAttribute(): array`
 
-- [x] Run `php artisan view:clear` (after edits) to ensure Blade cache clears
+## Step 2 — Backend: Admin VotingSessionController
+- [ ] Add `getVoters(VotingSession $votingSession, Request $request)` AJAX endpoint (status/search filters + pagination + statistics)
 
+## Step 3 — Backend: ExportController
+- [ ] Add `exportVoters(VotingSession $votingSession, Request $request)` CSV exporter
+- [ ] Add export route
+
+## Step 4 — Routing
+- [ ] Register AJAX voters route: `/admin/sessions/{votingSession}/voters`
+- [ ] Register CSV export route: `/admin/sessions/{votingSession}/voters/export`
+
+## Step 5 — Frontend: admin sessions show page
+- [ ] Insert “Voter Tracking” section into `resources/views/admin/sessions/show.blade.php`
+- [ ] Implement vanilla JS to:
+  - load voters via AJAX
+  - apply status filter + search
+  - handle pagination
+  - export CSV using current filters
+
+## Step 6 — Critical-path manual verification (after implementation)
+- [ ] Open an admin election “show” page
+- [ ] Click Refresh / change filters / paginate and verify table + statistics update
+- [ ] Verify CSV export downloads correct rows for current filters
+- [ ] Ensure no JS runtime errors on the page
