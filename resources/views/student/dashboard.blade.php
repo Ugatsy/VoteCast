@@ -891,31 +891,7 @@
 </div>
 
 {{-- Results Modal --}}
-<div class="modal fade" id="resultsModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-xl">
-        <div class="modal-content results-modal">
-            <div class="modal-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); color: white;">
-                <h5 class="modal-title" style="font-size:1rem">
-                    <i class="bi bi-bar-chart-fill me-2"></i>
-                    <span id="resultsModalTitle">Election Results</span>
-                </h5>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="last-update text-white-50" id="modalLastUpdate"></span>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-            </div>
-            <div class="modal-body" id="resultsModalContent">
-                <div class="text-center py-4">
-                    <div class="spinner-border text-primary"></div>
-                    <p class="mt-2">Loading results...</p>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
+@include('student.partials.results-modal')
 
 {{-- Receipt Modal --}}
 <div class="modal fade" id="receiptModal" tabindex="-1">
@@ -1150,58 +1126,7 @@
     setupUploadHandler();
     setupManualCodeHandler();
 
-    // Results and Receipt Functions
-    async function showLiveResults(sessionId) {
-        const modal = new bootstrap.Modal(document.getElementById('resultsModal'));
-        const modalTitle = document.getElementById('resultsModalTitle');
-        const modalContent = document.getElementById('resultsModalContent');
-        const lastUpdateSpan = document.getElementById('modalLastUpdate');
-
-        modalTitle.innerHTML = '<i class="bi bi-bar-chart-fill me-2"></i>Loading Live Results...';
-        modalContent.innerHTML = `<div class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2">Fetching results...</p></div>`;
-        modal.show();
-
-        try {
-            const response = await fetch(`/results/${sessionId}`, {
-                headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' }
-            });
-            const data = await response.json();
-
-            if (data.success) {
-                modalTitle.innerHTML = `<i class="bi bi-bar-chart-fill me-2"></i>${data.session_title} - Live Results`;
-                lastUpdateSpan.innerHTML = `<i class="bi bi-clock me-1"></i>Updated: ${data.last_update}`;
-                let resultsHtml = '<div class="results-container">';
-                data.results.forEach(position => {
-                    resultsHtml += `<div class="mb-4"><h5 class="fw-bold mb-3" style="font-size:0.95rem">${position.title}</h5><div class="list-group">`;
-                    position.candidates.forEach(candidate => {
-                        const percentage = position.total_votes > 0 ? (candidate.votes / position.total_votes * 100).toFixed(1) : 0;
-                        resultsHtml += `
-                            <div class="list-group-item">
-                                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1">
-                                    <div><strong style="font-size:0.85rem">${candidate.name}</strong>${candidate.is_winner ? '<span class="badge bg-success ms-2" style="font-size:0.65rem"><i class="bi bi-trophy"></i> Leading</span>' : ''}</div>
-                                    <div class="text-end"><span class="fw-bold" style="font-size:0.85rem">${candidate.votes}</span> <span class="text-muted" style="font-size:0.7rem">votes</span></div>
-                                </div>
-                                <div class="progress" style="height: 6px;"><div class="progress-bar bg-primary" style="width: ${percentage}%"></div></div>
-                                <div class="small text-muted mt-1" style="font-size:0.7rem">${percentage}%</div>
-                            </div>
-                        `;
-                    });
-                    resultsHtml += `</div></div>`;
-                });
-                resultsHtml += '</div>';
-                modalContent.innerHTML = resultsHtml;
-            } else {
-                modalContent.innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>${data.message || 'Unable to load results.'}</div>`;
-            }
-        } catch (error) {
-            modalContent.innerHTML = `<div class="alert alert-danger"><i class="bi bi-wifi-off me-2"></i>Network error. Please try again.</div>`;
-        }
-    }
-
-    async function showFinalResults(sessionId) {
-        await showLiveResults(sessionId);
-    }
-
+    // Receipt Functions
     async function viewReceipt(sessionId) {
         const modal = new bootstrap.Modal(document.getElementById('receiptModal'));
         const receiptContent = document.getElementById('receiptContent');
@@ -1218,12 +1143,45 @@
                 let votesHtml = '';
                 if (data.votes && data.votes.length > 0) {
                     data.votes.forEach(vote => {
-                        votesHtml += `<div class="vote-item"><div class="vote-position">${vote.position_title}</div><div class="vote-candidate">${vote.candidate_name}</div></div>`;
+                        const section = vote.candidate_section ? `<div class="small text-muted">${vote.candidate_section}</div>` : '';
+                        votesHtml += `
+                            <div class="vote-item">
+                                <div>
+                                    <div class="vote-position">${vote.position_title}</div>
+                                    ${section}
+                                </div>
+                                <div class="vote-candidate">${vote.candidate_name}</div>
+                            </div>
+                        `;
                     });
                 } else {
-                    votesHtml = `<div class="abstain-item"><i class="bi bi-eye-slash me-2"></i><strong>You abstained from all positions</strong><div class="small mt-1">No votes were cast in this election.</div></div>`;
+                    votesHtml = `
+                        <div class="abstain-item">
+                            <i class="bi bi-eye-slash me-2"></i>
+                            <strong>You abstained from all positions</strong>
+                            <div class="small mt-1">No votes were cast in this election.</div>
+                        </div>
+                    `;
                 }
-                receiptContent.innerHTML = `<div><div class="receipt-id-box mb-3"><div class="receipt-id-label">Receipt ID</div><div class="receipt-id-value">${data.receipt_id}</div><div style="font-size:0.7rem;color:#94a3b8;margin-top:4px">${data.voted_at}</div></div><div><h6 style="font-size:0.75rem" class="mb-2">Your Votes</h6>${votesHtml}</div><div class="mt-3 text-center small text-muted" style="font-size:0.7rem"><i class="bi bi-shield-check"></i> Official voting receipt</div></div>`;
+
+                receiptContent.innerHTML = `
+                    <div>
+                        <div class="receipt-id-box mb-3">
+                            <div class="receipt-id-label">Receipt ID</div>
+                            <div class="receipt-id-value">${data.receipt_id}</div>
+                            <div style="font-size:0.7rem;color:#94a3b8;margin-top:4px">${data.voted_at ?? ''}</div>
+                        </div>
+
+                        <div>
+                            <h6 style="font-size:0.75rem" class="mb-2">Your Votes</h6>
+                            ${votesHtml}
+                        </div>
+
+                        <div class="mt-3 text-center small text-muted" style="font-size:0.7rem">
+                            <i class="bi bi-shield-check"></i> Official voting receipt
+                        </div>
+                    </div>
+                `;
             } else {
                 receiptContent.innerHTML = `<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>${data.message || 'Receipt not found.'}</div>`;
             }

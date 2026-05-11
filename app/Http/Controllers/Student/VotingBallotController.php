@@ -258,34 +258,58 @@ class VotingBallotController extends Controller
 
     public function getReceipt(Request $request, $sessionId)
     {
-        $participation = Participation::where('voting_session_id', $sessionId)
-            ->where('user_id', auth()->id())
-            ->first();
+        try {
+            $user = auth()->user();
+            $session = VotingSession::findOrFail($sessionId);
 
-        if (!$participation) {
-            return response()->json(['error' => 'No receipt found'], 404);
+            if (!$session->canVote($user)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not authorized to view this receipt.'
+                ], 403);
+            }
+
+            $participation = Participation::where('voting_session_id', $sessionId)
+                ->where('user_id', $user->id)
+                ->first();
+
+            if (!$participation) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No receipt found for this election.'
+                ], 404);
+            }
+
+            $votes = Vote::where('receipt_id', $participation->receipt_id)
+                ->with(['candidate.student', 'position'])
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'receipt_id' => $participation->receipt_id,
+                'voted_at' => $participation->voted_at ? $participation->voted_at->format('F d, Y \a\t H:i') : null,
+                'has_votes' => $participation->has_votes,
+                'session_title' => $session->title,
+                'votes' => $votes->map(function ($vote) {
+                    return [
+                        'position_title' => $vote->position->title,
+                        'candidate_name' => $vote->candidate->student->full_name ?? 'Unknown',
+                        'candidate_section' => $vote->candidate->student->section ?? 'N/A',
+                    ];
+                }),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('getReceipt error', [
+                'session_id' => $sessionId,
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load receipt: ' . $e->getMessage()
+            ], 500);
         }
-
-        $votes = Vote::where('receipt_id', $participation->receipt_id)
-            ->with(['candidate.student', 'position'])
-            ->get();
-
-        $votingSession = VotingSession::find($sessionId);
-
-        return response()->json([
-            'success' => true,
-            'receipt_id' => $participation->receipt_id,
-            'voted_at' => $participation->voted_at,
-            'has_votes' => $participation->has_votes,
-            'session_title' => $votingSession ? $votingSession->title : 'Election',
-            'votes' => $votes->map(function ($vote) {
-                return [
-                    'position' => $vote->position->title,
-                    'candidate' => $vote->candidate->student->full_name,
-                    'candidate_section' => $vote->candidate->student->section ?? 'N/A',
-                ];
-            }),
-        ]);
     }
 
     public function showReceiptPage($sessionId)
