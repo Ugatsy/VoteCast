@@ -15,8 +15,21 @@ class VotingBallotController extends Controller
     {
         $user = auth()->user();
 
+        // ✅ Block access for cancelled sessions
+        if ($votingSession->status === 'cancelled') {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'This election has been cancelled and is no longer available.');
+        }
+
+        // ✅ Block access for paused sessions
+        if ($votingSession->status === 'paused') {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'This election is currently paused. Please check back later.');
+        }
+
         // ✅ NEW: Check if election has started (for scheduled sessions)
         if ($votingSession->status === 'scheduled' && now()->lt($votingSession->start_date)) {
+
             $waitMinutes = now()->diffInMinutes($votingSession->start_date);
             $waitHours = floor($waitMinutes / 60);
             $remainMins = $waitMinutes % 60;
@@ -100,8 +113,21 @@ class VotingBallotController extends Controller
 
         $votingSession = $releaseCode->votingSession;
 
+        // ✅ Check if election is cancelled
+        if ($votingSession->status === 'cancelled') {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'This election has been cancelled. Voting is not available.');
+        }
+
+        // ✅ Check if election is paused
+        if ($votingSession->status === 'paused') {
+            return redirect()->route('student.dashboard')
+                ->with('error', 'This election is currently paused. Please check back later.');
+        }
+
         // ✅ NEW: Check if election has started
         if (now()->lt($votingSession->start_date)) {
+
             $waitMinutes = now()->diffInMinutes($votingSession->start_date);
             $waitHours = floor($waitMinutes / 60);
             $remainMins = $waitMinutes % 60;
