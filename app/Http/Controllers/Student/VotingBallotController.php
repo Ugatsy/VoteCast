@@ -339,23 +339,25 @@ class VotingBallotController extends Controller
     }
 
     public function showReceiptPage($sessionId)
-    {
-        $participation = Participation::where('voting_session_id', $sessionId)
-            ->where('user_id', auth()->id())
-            ->first();
+{
+    $participation = Participation::where('voting_session_id', $sessionId)
+        ->where('user_id', auth()->id())
+        ->first();
 
-        if (!$participation) {
-            return redirect()->route('student.dashboard')
-                ->with('error', 'No receipt found for this election.');
-        }
-
-        $votes = Vote::where('receipt_id', $participation->receipt_id)
-            ->with(['candidate.student', 'position'])
-            ->get();
-
-        $votingSession = VotingSession::findOrFail($sessionId);
-        $receiptId = $participation->receipt_id;
-
-        return view('student.receipt', compact('votingSession', 'votes', 'receiptId'));
+    if (!$participation) {
+        return redirect()->route('student.dashboard')
+            ->with('error', 'No receipt found for this election.');
     }
+
+    // FIX: Get votes by voter_id instead of receipt_id
+    $votes = Vote::where('voting_session_id', $sessionId)
+        ->where('voter_id', auth()->id())
+        ->with(['candidate.student', 'position'])
+        ->get();
+
+    $votingSession = VotingSession::findOrFail($sessionId);
+    $receiptId = $participation->receipt_id;
+
+    return view('student.receipt', compact('votingSession', 'votes', 'receiptId'));
+}
 }
