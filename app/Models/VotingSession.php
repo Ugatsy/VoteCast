@@ -98,11 +98,16 @@ class VotingSession extends Model
 
             $query = User::students()->active();
 
-            // Filter by active semester
-            $activeSemester = Semester::getCurrent();
-            if ($activeSemester) {
-                $query->where('semester', $activeSemester->name)
-                    ->where('academic_year', $activeSemester->academic_year);
+            // For completed/cancelled sessions, use the stored semester
+            if (in_array($this->status, ['completed', 'cancelled']) && $this->semester && $this->academic_year) {
+                $query->where('semester', $this->semester)
+                    ->where('academic_year', $this->academic_year);
+            } else {
+                $activeSemester = Semester::getCurrent();
+                if ($activeSemester) {
+                    $query->where('semester', $activeSemester->name)
+                        ->where('academic_year', $activeSemester->academic_year);
+                }
             }
 
             if ($this->category === 'course' && $this->target_course) {
@@ -209,11 +214,16 @@ class VotingSession extends Model
     {
         $query = User::students()->active();
 
-        // Filter by active semester
-        $activeSemester = Semester::getCurrent();
-        if ($activeSemester) {
-            $query->where('semester', $activeSemester->name)
-                ->where('academic_year', $activeSemester->academic_year);
+        // For completed/cancelled sessions, use the stored semester
+        if (in_array($this->status, ['completed', 'cancelled']) && $this->semester && $this->academic_year) {
+            $query->where('semester', $this->semester)
+                ->where('academic_year', $this->academic_year);
+        } else {
+            $activeSemester = Semester::getCurrent();
+            if ($activeSemester) {
+                $query->where('semester', $activeSemester->name)
+                    ->where('academic_year', $activeSemester->academic_year);
+            }
         }
 
         // Apply category filters

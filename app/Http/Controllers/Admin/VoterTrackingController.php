@@ -99,7 +99,6 @@ class VoterTrackingController extends Controller
                 fputcsv($file, [
                     $voter['student_id'] ?? '',
                     $voter['full_name'] ?? '',
-                    // We only have department in our optimized query.
                     $voter['department'] ?? '',
                     $voter['year_level'] ?? '',
                     $voter['section'] ?? '',
@@ -121,7 +120,19 @@ class VoterTrackingController extends Controller
      */
     private function getOptimizedVoters(VotingSession $session): array
     {
-        $activeSemester = Semester::getCurrent();
+        // For completed/cancelled sessions, use the session's stored semester
+        // For active/scheduled sessions, use current active semester
+        $targetSemester = null;
+
+        if (in_array($session->status, ['completed', 'cancelled', 'paused']) && $session->semester && $session->academic_year) {
+            // Use the session's original semester for completed/past sessions
+            $targetSemester = (object) [
+                'name' => $session->semester,
+                'academic_year' => $session->academic_year
+            ];
+        } else {
+            $targetSemester = Semester::getCurrent();
+        }
 
         $query = DB::table('users')
             ->select([
@@ -146,9 +157,10 @@ class VoterTrackingController extends Controller
             ->where('users.role', 'student')
             ->where('users.is_active', true);
 
-        if ($activeSemester) {
-            $query->where('users.semester', $activeSemester->name)
-                ->where('users.academic_year', $activeSemester->academic_year);
+        // Use the appropriate semester filter
+        if ($targetSemester) {
+            $query->where('users.semester', $targetSemester->name)
+                ->where('users.academic_year', $targetSemester->academic_year);
         }
 
         switch ($session->category) {
@@ -192,7 +204,14 @@ class VoterTrackingController extends Controller
      */
     private function getOptimizedStatistics(VotingSession $session): array
     {
+        // Use session's stored total_voters or calculate dynamically
         $eligibleCount = $session->total_voters;
+
+        // If eligibleCount is 0 but session has voters, calculate properly
+        if ($eligibleCount === 0 && in_array($session->status, ['completed', 'cancelled'])) {
+            // Fallback: count manually using the same logic as getOptimizedVoters
+            $eligibleCount = count($this->getOptimizedVoters($session));
+        }
 
         $stats = DB::table('participations')
             ->where('voting_session_id', $session->id)
@@ -205,13 +224,13 @@ class VoterTrackingController extends Controller
 
         $votedCount = (int) ($stats->voted ?? 0);
         $abstainedCount = (int) ($stats->abstained ?? 0);
-        $notVotedCount = $eligibleCount - $votedCount - $abstainedCount;
+        $notVotedCount = max(0, $eligibleCount - $votedCount - $abstainedCount);
 
         return [
             'eligible' => $eligibleCount,
             'voted' => $votedCount,
             'abstained' => $abstainedCount,
-            'not_voted' => max(0, $notVotedCount),
+            'not_voted' => $notVotedCount,
             'turnout_percentage' => $eligibleCount > 0
                 ? round(($votedCount / $eligibleCount) * 100, 2)
                 : 0,

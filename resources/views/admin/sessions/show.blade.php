@@ -561,6 +561,10 @@ function toggleScheduleEdit() {
 (function () {
     const badge        = document.getElementById('statusBadge');
     const timeCtx      = document.getElementById('timeContext');
+
+    // Check if elements exist before proceeding
+    if (!badge || !timeCtx) return;
+
     const startTs      = parseInt(badge.dataset.start, 10) * 1000;   // ms
     const endTs        = parseInt(badge.dataset.end,   10) * 1000;
     const serverStatus = badge.dataset.serverStatus;
@@ -592,6 +596,8 @@ function toggleScheduleEdit() {
         badge.textContent = label;
     }
 
+    let timer = null; // Declare timer here
+
     function tick() {
         const now = Date.now();
 
@@ -601,6 +607,7 @@ function toggleScheduleEdit() {
             timeCtx.textContent = serverStatus === 'paused'
                 ? '⏸ Election is paused by an administrator.'
                 : '✕ Election has been cancelled.';
+            if (timer) clearInterval(timer); // Clear timer if manual state
             return; // no further ticking needed
         }
 
@@ -619,12 +626,12 @@ function toggleScheduleEdit() {
             applyBadge('completed', 'Completed');
             const diff = now - endTs;
             timeCtx.innerHTML = `<i class="bi bi-check-circle me-1 text-primary"></i>Ended <strong>${formatDuration(diff)}</strong> ago`;
-            clearInterval(timer); // no need to keep ticking
+            if (timer) clearInterval(timer); // stop ticking
         }
     }
 
     tick(); // immediate first render
-    const timer = setInterval(tick, 1000);
+    timer = setInterval(tick, 1000); // Assign to the declared variable
 })();
 
 // ── QR Download helper ─────────────────────────────────────────────────────
