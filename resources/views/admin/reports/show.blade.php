@@ -1,4 +1,3 @@
-{{-- resources/views/admin/reports/show.blade.php --}}
 @extends('layouts.admin')
 @section('title', 'Report — ' . $votingSession->title)
 
@@ -59,6 +58,13 @@
     <div class="progress" style="height:10px;border-radius:6px;background:#e2e8f0">
         <div class="progress-bar" style="width:{{ $turnout }}%;border-radius:6px;background:linear-gradient(90deg,#1a56db,#7c3aed);transition:width 1.2s ease"></div>
     </div>
+    @if($turnout >= 75)
+        <div class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>Excellent turnout!</div>
+    @elseif($turnout >= 50)
+        <div class="small text-primary mt-1"><i class="bi bi-info-circle me-1"></i>Good participation.</div>
+    @elseif($totalVoters > 0)
+        <div class="small text-muted mt-1"><i class="bi bi-hourglass-split me-1"></i>Voting is in progress.</div>
+    @endif
 </div>
 
 {{-- Results per position --}}
@@ -69,10 +75,14 @@
     $candidates = $result['candidates'];
     $maxWinners = $position->max_winners;
 
-    $abstainCount = $votingSession->total_votes_cast - $totalVotes;
+    // Get total participants who cast any votes in this session
     $totalParticipants = $votingSession->total_votes_cast;
+
+    // Abstained for this position = participants who didn't vote for this position
+    $abstainCount = $totalParticipants - $totalVotes;
     $abstainPercentage = $totalParticipants > 0 ? round(($abstainCount / $totalParticipants) * 100, 2) : 0;
 
+    // Calculate winners
     $winners = [];
     if ($candidates->count() > 0) {
         $sortedCandidates = $candidates->sortByDesc('vote_count')->values();
@@ -111,8 +121,10 @@
             <a href="#" class="text-muted small text-decoration-none view-abstain-btn"
                data-position-id="{{ $position->id }}"
                data-position-title="{{ $position->title }}"
-               data-abstain-count="{{ $abstainCount }}">
+               data-abstain-count="{{ $abstainCount }}"
+               data-total-participants="{{ $totalParticipants }}">
                 <i class="bi bi-x-circle me-1"></i>{{ number_format($abstainCount) }} abstained
+                <span class="text-muted">(did not vote for this position)</span>
             </a>
             @endif
         </div>
@@ -171,11 +183,12 @@
         <p class="text-muted text-center py-3 mb-0">No candidates for this position.</p>
         @endforelse
 
+        {{-- Show abstain bar --}}
         @if($totalParticipants > 0)
         <div class="mt-3 pt-2 border-top">
             <div class="d-flex justify-content-between small mb-1 text-muted">
-                <span>Abstained</span>
-                <span>{{ number_format($abstainCount) }} votes ({{ $abstainPercentage }}%)</span>
+                <span>Abstained (participated but didn't vote for this position)</span>
+                <span>{{ number_format($abstainCount) }} voters ({{ $abstainPercentage }}%)</span>
             </div>
             <div class="progress" style="height:7px;border-radius:4px;background:#e2e8f0">
                 <div class="progress-bar bg-secondary"
@@ -281,7 +294,7 @@
 
         {{-- Voters Table --}}
         <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0 voter-tracking-table" id="votersTable">
+            <table class="table table-sm table-hover align-middle mb-0" id="votersTable">
                 <thead class="table-light">
                     <tr>
                         <th style="width: 15%">Student ID</th>
@@ -295,8 +308,8 @@
                 </thead>
                 <tbody id="votersTableBody">
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
-                            <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                        <td colspan="7" class="text-center py-4">
+                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                             Loading voters...
                         </td>
                     </tr>
@@ -362,8 +375,7 @@
                 <div class="d-flex justify-content-between align-items-center mt-3">
                     <div class="small text-muted" id="voterPaginationInfo">Showing 0 of 0 voters</div>
                     <nav>
-                        <ul class="pagination pagination-sm mb-0" id="voterPagination">
-                        </ul>
+                        <ul class="pagination pagination-sm mb-0" id="voterPagination"></ul>
                     </nav>
                 </div>
             </div>
@@ -386,12 +398,24 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div class="alert alert-info small mb-3">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>What does "abstained" mean?</strong> These voters participated in the election (cast votes for other positions) but chose NOT to vote for <strong id="abstainPositionName"></strong>.
+                </div>
+
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="badge bg-secondary" id="abstainCountBadge">0 abstained</span>
                     <div>
-                        <input type="text" id="abstainSearchInput" class="form-control form-control-sm" placeholder="Search voters..." style="width: 200px;">
+                        <span class="badge bg-secondary" id="abstainCountBadge">0 abstained</span>
+                        <span class="badge bg-light text-dark ms-2" id="totalParticipantsBadge"></span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <input type="text" id="abstainSearchInput" class="form-control form-control-sm" placeholder="Search by name or ID..." style="width: 250px;">
+                        <button id="exportAbstainedBtn" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-download me-1"></i>Export CSV
+                        </button>
                     </div>
                 </div>
+
                 <div class="table-responsive">
                     <table class="table table-sm table-hover">
                         <thead class="table-light">
@@ -413,11 +437,11 @@
                         </tbody>
                     </table>
                 </div>
+
                 <div class="d-flex justify-content-between align-items-center mt-3">
                     <div class="small text-muted" id="abstainPaginationInfo">Showing 0 of 0 voters</div>
                     <nav>
-                        <ul class="pagination pagination-sm mb-0" id="abstainPagination">
-                        </ul>
+                        <ul class="pagination pagination-sm mb-0" id="abstainPagination"></ul>
                     </nav>
                 </div>
             </div>
@@ -527,12 +551,17 @@ document.addEventListener('DOMContentLoaded', function() {
             window.currentPositionId = this.dataset.positionId;
             const positionTitle = this.dataset.positionTitle;
             const abstainCount = this.dataset.abstainCount;
+            const totalParticipants = this.dataset.totalParticipants;
 
             const modalTitle = document.getElementById('abstainModalTitle');
             const abstainCountBadge = document.getElementById('abstainCountBadge');
+            const totalParticipantsBadge = document.getElementById('totalParticipantsBadge');
+            const abstainPositionName = document.getElementById('abstainPositionName');
 
-            if (modalTitle) modalTitle.innerHTML = `${positionTitle} - Abstained Voters`;
+            if (modalTitle) modalTitle.innerHTML = `Abstained Voters - ${positionTitle}`;
             if (abstainCountBadge) abstainCountBadge.innerHTML = `${abstainCount} abstained`;
+            if (totalParticipantsBadge) totalParticipantsBadge.innerHTML = `out of ${totalParticipants} total participants`;
+            if (abstainPositionName) abstainPositionName.innerHTML = `<strong>${positionTitle}</strong>`;
 
             window.currentAbstainPage = 1;
             window.currentAbstainSearch = '';
@@ -582,6 +611,19 @@ document.addEventListener('DOMContentLoaded', function() {
             let url = `/admin/sessions/{{ $votingSession->id }}/voters/export?candidate_id=${window.currentCandidateId}`;
             if (window.currentSearchTerm) {
                 url += `&search=${encodeURIComponent(window.currentSearchTerm)}`;
+            }
+            window.open(url, '_blank');
+        });
+    }
+
+    // Export abstained voters button
+    const exportAbstainedBtn = document.getElementById('exportAbstainedBtn');
+    if (exportAbstainedBtn) {
+        exportAbstainedBtn.addEventListener('click', function() {
+            if (!window.currentPositionId) return;
+            let url = `/admin/sessions/{{ $votingSession->id }}/positions/${window.currentPositionId}/abstained/export`;
+            if (window.currentAbstainSearch) {
+                url += `?search=${encodeURIComponent(window.currentAbstainSearch)}`;
             }
             window.open(url, '_blank');
         });
@@ -675,7 +717,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         votersTableBody.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center text-muted py-4">
+                <td colspan="7" class="text-center py-4">
                     <div class="spinner-border spinner-border-sm text-primary me-2"></div>
                     Loading voters...
                 </td>
@@ -763,7 +805,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 votersTableBody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="7" class="text-center py-4">
                             <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
                             No voters found.
                         </td>

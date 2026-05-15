@@ -70,6 +70,16 @@ Route::prefix('admin')->name('admin.')->group(function () {
     // Protected admin routes
     Route::middleware('admin')->group(function () {
 
+        // Get voters for a specific candidate (AJAX)
+    Route::get('/sessions/{votingSession}/candidates/{candidate}/voters',
+        [Admin\VotingSessionController::class, 'getCandidateVoters'])
+        ->name('sessions.candidates.voters');
+
+    // Get abstained voters for a position (AJAX)
+    Route::get('/sessions/{votingSession}/positions/{position}/abstained',
+        [Admin\VotingSessionController::class, 'getAbstainedVoters'])
+        ->name('sessions.positions.abstained');
+
         // Admin Dashboard
         Route::get('/dashboard', [Admin\DashboardController::class, 'index'])->name('dashboard');
 
@@ -100,7 +110,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/sessions/{votingSession}/voters', [Admin\VoterTrackingController::class, 'getVoters'])
             ->name('sessions.voters');
         Route::get('/sessions/{votingSession}/voters/export', [Admin\VoterTrackingController::class, 'exportVoters'])
-            ->name('sessions.voters.export');
+        ->name('sessions.voters.export');
+
+        Route::get('/sessions/{votingSession}/positions/{position}/abstained/export',
+        [Admin\VoterTrackingController::class, 'exportAbstainedVoters'])
+        ->name('sessions.positions.abstained.export');
 
         // ── Positions & Candidates Management ───────────────────────────────────
         Route::get('/sessions/{votingSession}/candidates', [Admin\VotingSessionController::class, 'candidates'])->name('sessions.candidates');
@@ -108,6 +122,22 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::delete('/positions/{position}', [Admin\VotingSessionController::class, 'deletePosition'])->name('positions.delete');
         Route::post('/positions/{position}/candidates', [Admin\VotingSessionController::class, 'addCandidate'])->name('positions.candidates.add');
         Route::delete('/candidates/{candidate}', [Admin\VotingSessionController::class, 'removeCandidate'])->name('candidates.delete');
+
+        // Get voters for a specific candidate
+        Route::get('/sessions/{votingSession}/candidates/{candidate}/voters',
+            [Admin\VotingSessionController::class, 'getCandidateVoters'])
+            ->name('sessions.candidates.voters');
+
+        // Get abstained voters for a position
+        Route::get('/sessions/{votingSession}/positions/{position}/abstained',
+            [Admin\VotingSessionController::class, 'getAbstainedVoters'])
+            ->name('sessions.positions.abstained');
+
+        // Add this to the admin routes group (inside the middleware('admin') group)
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('/', [Admin\ReportsController::class, 'index'])->name('index');
+            Route::get('/{votingSession}', [Admin\ReportsController::class, 'show'])->name('show');
+        });
 
         // ── API Routes for Real-time Updates ────────────────────────────────────
         Route::prefix('api')->name('api.')->group(function () {

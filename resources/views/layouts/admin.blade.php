@@ -262,6 +262,10 @@
            class="nav-link @if(request()->routeIs('admin.sessions.*') || request()->routeIs('admin.positions.*') || request()->routeIs('admin.candidates.*')) active @endif">
             <i class="bi bi-ballot"></i> Elections
         </a>
+        <a href="{{ route('admin.reports.index') }}"
+           class="nav-link @if(request()->routeIs('admin.reports.*')) active @endif">
+            <i class="bi bi-file-text"></i> Reports
+        </a>
     </nav>
     <div class="sidebar-footer">
         <div class="text-white-50 small mb-2">{{ auth()->user()->full_name }}</div>

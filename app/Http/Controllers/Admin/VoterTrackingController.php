@@ -57,63 +57,102 @@ class VoterTrackingController extends Controller
     /**
      * Export voters to CSV with current filters.
      */
-    public function exportVoters(VotingSession $votingSession, Request $request)
-    {
-        $voters = $this->getOptimizedVoters($votingSession);
-        $voters = $this->applyFilters($voters, $request);
-
-        if ($request->filled('search')) {
-            $voters = $this->applySearch($voters, (string) $request->search);
+public function exportVoters(VotingSession $votingSession, Request $request)
+{
+    // If candidate_id is provided, export voters for that candidate only
+    if ($request->has('candidate_id')) {
+        $candidate = Candidate::find($request->candidate_id);
+        if ($candidate && $candidate->position->voting_session_id === $votingSession->id) {
+            return $this->exportCandidateVoters($candidate, $request);
         }
-
-        $voters = array_values($voters);
-
-        $filename = "voters-{$votingSession->id}-" . date('Ymd_His') . '.csv';
-
-        $headers = [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-            'Cache-Control' => 'private',
-            'Pragma' => 'private',
-        ];
-
-        $callback = function () use ($voters) {
-            $file = fopen('php://output', 'w');
-
-            // UTF-8 BOM for Excel compatibility
-            fputs($file, "\xEF\xBB\xBF");
-
-            fputcsv($file, [
-                'Student ID',
-                'Full Name',
-                'Course',
-                'Year Level',
-                'Section',
-                'Status',
-                'Voted At',
-            ]);
-
-            foreach ($voters as $voter) {
-                $statusText = $this->getStatusText((string) ($voter['status'] ?? ''));
-
-                fputcsv($file, [
-                    $voter['student_id'] ?? '',
-                    $voter['full_name'] ?? '',
-                    $voter['department'] ?? '',
-                    $voter['year_level'] ?? '',
-                    $voter['section'] ?? '',
-                    $statusText,
-                    !empty($voter['voted_at'])
-                        ? date('Y-m-d H:i:s', strtotime((string) $voter['voted_at']))
-                        : '',
-                ]);
-            }
-
-            fclose($file);
-        };
-
-        return response()->stream($callback, 200, $headers);
     }
+
+    // Original export logic for all voters
+    $voters = $this->getOptimizedVoters($votingSession);
+    $voters = $this->applyFilters($voters, $request);
+
+    if ($request->filled('search')) {
+        $voters = $this->applySearch($voters, (string) $request->search);
+    }
+
+    $voters = array_values($voters);
+
+    $filename = "voters-{$votingSession->id}-" . date('Ymd_His') . '.csv';
+
+    $headers = [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        'Cache-Control' => 'private',
+        'Pragma' => 'private',
+    ];
+
+    $callback = function () use ($voters) {
+        $file = fopen('php://output', 'w');
+        fputs($file, "\xEF\xBB\xBF");
+        fputcsv($file, [
+            'Student ID', 'Full Name', 'Course', 'Year Level', 'Section', 'Status', 'Voted At',
+        ]);
+
+        foreach ($voters as $voter) {
+            $statusText = $this->getStatusText((string) ($voter['status'] ?? ''));
+            fputcsv($file, [
+                $voter['student_id'] ?? '',
+                $voter['full_name'] ?? '',
+                $voter['department'] ?? '',
+                $voter['year_level'] ?? '',
+                $voter['section'] ?? '',
+                $statusText,
+                !empty($voter['voted_at']) ? date('Y-m-d H:i:s', strtotime((string) $voter['voted_at'])) : '',
+            ]);
+        }
+        fclose($file);
+    };
+
+    return response()->stream($callback, 200, $headers);
+}
+
+private function exportCandidateVoters(Candidate $candidate, Request $request)
+{
+    $query = Vote::where('candidate_id', $candidate->id)
+        ->with(['voter']);
+
+    if ($request->filled('search')) {
+        $search = '%' . addcslashes($request->search, '%_') . '%';
+        $query->whereHas('voter', function ($q) use ($search) {
+            $q->where('full_name', 'ilike', $search)
+              ->orWhere('student_id', 'ilike', $search);
+        });
+    }
+
+    $votes = $query->get();
+
+    $filename = "candidate-{$candidate->id}-voters-" . date('Ymd_His') . '.csv';
+
+    $headers = [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+    ];
+
+    $callback = function () use ($votes, $candidate) {
+        $file = fopen('php://output', 'w');
+        fputs($file, "\xEF\xBB\xBF");
+        fputcsv($file, ['Student ID', 'Full Name', 'Section', 'Year Level', 'Voted At']);
+
+        foreach ($votes as $vote) {
+            $voter = $vote->voter;
+            fputcsv($file, [
+                $voter->student_id ?? '',
+                $voter->full_name ?? '',
+                $voter->section ?? '',
+                $voter->year_level ?? '',
+                $vote->created_at->format('Y-m-d H:i:s'),
+            ]);
+        }
+        fclose($file);
+    };
+
+    return response()->stream($callback, 200, $headers);
+}
 
     /**
      * Optimized voters data using a single LEFT JOIN query.
@@ -293,4 +332,60 @@ class VoterTrackingController extends Controller
         Cache::forget("session_total_voters_{$sessionId}");
         Cache::forget("session_stats_{$sessionId}");
     }
+
+    // app/Http/Controllers/Admin/VoterTrackingController.php
+
+/**
+ * Export abstained voters for a specific position
+ */
+public function exportAbstainedVoters(VotingSession $votingSession, Position $position, Request $request)
+{
+    // Security check
+    if ($position->voting_session_id !== $votingSession->id) {
+        return back()->with('error', 'Invalid position for this session.');
+    }
+
+    $search = $request->get('search', '');
+    $abstainedUsers = $votingSession->getPositionAbstainedVoters($position, $search);
+
+    $filename = "abstained-voters-{$votingSession->id}-position-{$position->id}-" . date('Ymd_His') . '.csv';
+
+    $headers = [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+    ];
+
+    $callback = function () use ($abstainedUsers, $position, $votingSession) {
+        $file = fopen('php://output', 'w');
+        fputs($file, "\xEF\xBB\xBF");
+        fputcsv($file, [
+            'Student ID',
+            'Full Name',
+            'Section',
+            'Year Level',
+            'Department/Course',
+            'Voted At'
+        ]);
+
+        foreach ($abstainedUsers as $user) {
+            $participation = $votingSession->participations()
+                ->where('user_id', $user->id)
+                ->first();
+
+            fputcsv($file, [
+                $user->student_id ?? '',
+                $user->full_name ?? '',
+                $user->section ?? '',
+                $user->year_level ?? '',
+                $user->department ?? '',
+                $participation && $participation->voted_at
+                    ? $participation->voted_at->format('Y-m-d H:i:s')
+                    : '',
+            ]);
+        }
+        fclose($file);
+    };
+
+    return response()->stream($callback, 200, $headers);
+}
 }

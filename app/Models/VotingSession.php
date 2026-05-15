@@ -306,4 +306,41 @@ class VotingSession extends Model
                 : 0,
         ];
     }
+    // app/Models/VotingSession.php
+
+/**
+ * Get voters who abstained from voting for a specific position
+ * (Users who participated but didn't vote for this position)
+ */
+public function getPositionAbstainedVoters(Position $position, $search = null)
+{
+    // Get all voters who participated in this session
+    $participatedUsers = $this->participations()
+        ->where('has_votes', true) // Users who cast at least some votes
+        ->with('user')
+        ->get()
+        ->pluck('user');
+
+    // Get voters who cast votes for this specific position
+    $votedForPosition = Vote::where('voting_session_id', $this->id)
+        ->where('position_id', $position->id)
+        ->pluck('voter_id')
+        ->toArray();
+
+    // Abstained for this position = participated but didn't vote for this position
+    $abstainedUsers = $participatedUsers->filter(function($user) use ($votedForPosition) {
+        return !in_array($user->id, $votedForPosition);
+    });
+
+    // Apply search filter
+    if ($search) {
+        $searchTerm = strtolower($search);
+        $abstainedUsers = $abstainedUsers->filter(function($user) use ($searchTerm) {
+            return strpos(strtolower($user->full_name), $searchTerm) !== false
+                || strpos(strtolower($user->student_id ?? ''), $searchTerm) !== false;
+        });
+    }
+
+    return $abstainedUsers->values();
+}
 }

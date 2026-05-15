@@ -162,3 +162,35 @@ docker-compose logs -f app              # Watch logs
 docker-compose exec app php artisan migrate    # Run migrations
 docker-compose exec app composer install       # Install dependencies
 docker-compose exec app php artisan tinker     # Open REPL
+
+
+
+for new git:clone system
+
+# First, start your containers
+docker-compose up -d
+
+# Then run composer inside the app container
+docker-compose exec app composer install
+
+# Or if you need to update
+docker-compose exec app composer update
+
+# Install specific package
+docker-compose exec app composer require laravel/sanctum
+
+
+add user admin
+
+docker-compose exec app php artisan tinker
+
+\App\Models\User::updateOrCreate(
+    ['email' => 'jameson@votecast.edu'],
+    [
+        'full_name' => 'Jameson',
+        'password' => \Illuminate\Support\Facades\Hash::make('admin123'),
+        'role' => 'super_admin',
+        'is_active' => true
+    ]
+);
+exit;

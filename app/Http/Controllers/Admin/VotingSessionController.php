@@ -465,4 +465,153 @@ class VotingSessionController extends Controller
             'statistics' => $votingSession->vote_statistics,
         ]);
     }
+
+/**
+ * Get voters who voted for a specific candidate (AJAX endpoint)
+ */
+public function getCandidateVoters(VotingSession $votingSession, Candidate $candidate, Request $request)
+{
+    try {
+        // Security: Ensure candidate belongs to this session
+        if ($candidate->position->voting_session_id !== $votingSession->id) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid candidate for this election session.'
+            ], 403);
+        }
+
+        $perPage = (int) $request->get('per_page', 20);
+        $perPage = min($perPage, 100); // Max 100 per page
+        $page = (int) $request->get('page', 1);
+        $page = max($page, 1);
+        $search = $request->get('search', '');
+
+        // Build the query for votes on this candidate
+        $query = Vote::where('candidate_id', $candidate->id)
+            ->where('voting_session_id', $votingSession->id)
+            ->with(['voter']);
+
+        // Apply search filter if provided
+        if (!empty($search)) {
+            $searchTerm = '%' . addcslashes($search, '%_') . '%';
+            $query->whereHas('voter', function ($q) use ($searchTerm) {
+                $q->where('full_name', 'ilike', $searchTerm)
+                  ->orWhere('student_id', 'ilike', $searchTerm)
+                  ->orWhere('section', 'ilike', $searchTerm);
+            });
+        }
+
+        $total = $query->count();
+        $offset = ($page - 1) * $perPage;
+
+        $votes = $query->orderBy('created_at', 'desc')
+            ->skip($offset)
+            ->take($perPage)
+            ->get();
+
+        $voters = $votes->map(function ($vote) {
+            $voter = $vote->voter;
+            return [
+                'student_id' => $voter->student_id ?? 'N/A',
+                'full_name' => $voter->full_name ?? 'Unknown',
+                'section' => $voter->section ?? 'N/A',
+                'year_level' => $voter->year_level ?? 'N/A',
+                'voted_at' => $vote->created_at ? $vote->created_at->format('Y-m-d H:i:s') : null,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'candidate_name' => $candidate->student->full_name ?? $candidate->full_name,
+            'candidate_section' => $candidate->student->section ?? 'N/A',
+            'vote_count' => $total,
+            'voters' => $voters,
+            'total' => $total,
+            'current_page' => $page,
+            'last_page' => max(1, (int) ceil($total / $perPage)),
+            'per_page' => $perPage,
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Error in getCandidateVoters: ' . $e->getMessage(), [
+            'session_id' => $votingSession->id,
+            'candidate_id' => $candidate->id,
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'error' => 'Failed to load voters: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Get abstained voters for a specific position (AJAX endpoint)
+ */
+public function getAbstainedVoters(VotingSession $votingSession, Position $position, Request $request)
+{
+    try {
+        // Security: Ensure position belongs to this session
+        if ($position->voting_session_id !== $votingSession->id) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid position for this election session.'
+            ], 403);
+        }
+
+        $perPage = (int) $request->get('per_page', 20);
+        $perPage = min($perPage, 100);
+        $page = (int) $request->get('page', 1);
+        $page = max($page, 1);
+        $search = $request->get('search', '');
+
+        // Get abstained users for this position
+        $abstainedUsers = $votingSession->getPositionAbstainedVoters($position, $search);
+
+        $total = $abstainedUsers->count();
+        $offset = ($page - 1) * $perPage;
+        $paginatedUsers = $abstainedUsers->slice($offset, $perPage);
+
+        $voters = $paginatedUsers->map(function ($user) use ($votingSession) {
+            // Get the participation record to find when they voted
+            $participation = $votingSession->participations()
+                ->where('user_id', $user->id)
+                ->first();
+
+            return [
+                'student_id' => $user->student_id ?? 'N/A',
+                'full_name' => $user->full_name ?? 'Unknown',
+                'section' => $user->section ?? 'N/A',
+                'year_level' => $user->year_level ?? 'N/A',
+                'voted_at' => $participation && $participation->voted_at
+                    ? $participation->voted_at->format('Y-m-d H:i:s')
+                    : null,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'position_title' => $position->title,
+            'abstain_count' => $total,
+            'voters' => $voters,
+            'total' => $total,
+            'current_page' => $page,
+            'last_page' => max(1, (int) ceil($total / $perPage)),
+            'per_page' => $perPage,
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('Error in getAbstainedVoters: ' . $e->getMessage(), [
+            'session_id' => $votingSession->id,
+            'position_id' => $position->id,
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'error' => 'Failed to load abstained voters: ' . $e->getMessage()
+        ], 500);
+    }
+}
 }
