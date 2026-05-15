@@ -95,16 +95,6 @@
 
                 <div class="mb-3">
                     <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" name="allow_vote_changes"
-                               id="allowChanges" value="1" @checked(old('allow_vote_changes'))>
-                        <label class="form-check-label small" for="allowChanges">
-                            Allow voters to change their vote
-                        </label>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" name="requires_release_code"
                                id="releaseCodeToggle" value="1" @checked(old('requires_release_code'))>
                         <label class="form-check-label small" for="releaseCodeToggle">
