@@ -71,14 +71,51 @@
 
 {{-- Results per position --}}
 @forelse($results as $result)
+@php
+    $position = $result['position'];
+    $totalVotes = $result['total_votes'];
+    $candidates = $result['candidates'];
+    $maxWinners = $position->max_winners;
+
+    // Calculate winners (same logic as results-modal)
+    $winners = [];
+    if ($candidates->count() > 0) {
+        $sortedCandidates = $candidates->sortByDesc('vote_count')->values();
+        $topCandidates = $sortedCandidates->take($maxWinners);
+        $winnerVoteCounts = $topCandidates->pluck('vote_count')->toArray();
+
+        if ($sortedCandidates->count() > $maxWinners) {
+            $lastWinnerVoteCount = $winnerVoteCounts[$maxWinners - 1] ?? 0;
+            $nextCandidateVoteCount = $sortedCandidates[$maxWinners]['vote_count'] ?? 0;
+
+            if ($lastWinnerVoteCount == $nextCandidateVoteCount) {
+                // Tie for last winner position - include all tied candidates
+                $winners = $sortedCandidates->filter(function($candidate) use ($lastWinnerVoteCount) {
+                    return $candidate['vote_count'] == $lastWinnerVoteCount;
+                })->pluck('candidate.id')->toArray();
+            } else {
+                $winners = $topCandidates->pluck('candidate.id')->toArray();
+            }
+        } else {
+            $winners = $topCandidates->pluck('candidate.id')->toArray();
+        }
+    }
+@endphp
 <div class="card border-0 shadow-sm mb-4" style="border-radius:12px">
     <div class="card-header bg-white py-3 px-4 d-flex justify-content-between align-items-center">
-        <strong>{{ $result['position']->title }}</strong>
-        <span class="text-muted small">{{ $result['total_votes'] }} vote(s) cast</span>
+        <div>
+            <strong>{{ $position->title }}</strong>
+            @if($maxWinners > 1)
+                <span class="badge bg-primary ms-2">{{ $maxWinners }} winner(s)</span>
+            @endif
+        </div>
+        <span class="text-muted small">{{ number_format($totalVotes) }} vote(s) cast</span>
     </div>
     <div class="card-body px-4 py-3">
-        @forelse($result['candidates'] as $i => $item)
-        @php $isWinner = $i === 0 && $result['total_votes'] > 0; @endphp
+        @forelse($candidates as $item)
+        @php
+            $isWinner = in_array($item['candidate']->id, $winners);
+        @endphp
         <div class="mb-3 p-3 rounded-3 {{ $isWinner ? 'border border-success' : 'border' }}"
              style="{{ $isWinner ? 'background:#f0fdf4' : 'background:#fafafa' }}">
             <div class="d-flex align-items-center gap-3 mb-2">
@@ -97,20 +134,22 @@
                         <div>
                             <span class="fw-semibold">{{ $item['candidate']->student->full_name }}</span>
                             @if($isWinner)
-                                <span class="badge bg-success ms-2" style="font-size:0.7rem">Winner</span>
+                                <span class="badge bg-success ms-2" style="font-size:0.7rem">
+                                    <i class="bi bi-trophy me-1"></i>Winner
+                                </span>
                             @endif
-                            <div class="text-muted small">{{ $item['candidate']->student->section }}</div>
+                            <div class="text-muted small">{{ $item['candidate']->student->section ?? 'N/A' }}</div>
                         </div>
                         <div class="text-end">
-                            <div class="fw-bold fs-5 lh-1">{{ $item['vote_count'] }}</div>
+                            <div class="fw-bold fs-5 lh-1">{{ number_format($item['vote_count']) }}</div>
                             <div class="text-muted small">{{ $item['percentage'] }}%</div>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="progress" style="height:7px;border-radius:4px;background:#e2e8f0">
-                <div class="progress-bar {{ $isWinner ? '' : '' }}"
-                     style="width:{{ $item['percentage'] }}%;border-radius:4px;background:{{ $isWinner ? '#22c55e' : '#1a56db' }};transition:width 1.2s ease {{ $i * 0.1 }}s">
+                <div class="progress-bar {{ $isWinner ? 'bg-success' : 'bg-primary' }}"
+                     style="width:{{ $item['percentage'] }}%;border-radius:4px;transition:width 1.2s ease {{ $loop->index * 0.1 }}s">
                 </div>
             </div>
         </div>
@@ -138,6 +177,10 @@
 .vc-stat-card--blue  { border-left: 4px solid #1a56db; }
 .vc-stat-card-label  { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .4px; }
 .vc-stat-card-value  { font-size: 2rem; font-weight: 700; line-height: 1.15; margin-top: 4px; }
+.badge-status-active    { background: #22c55e20; color: #15803d; }
+.badge-status-scheduled { background: #eab30820; color: #a16207; }
+.badge-status-paused    { background: #f9731620; color: #9a3412; }
+.badge-status-completed { background: #3b82f620; color: #1e40af; }
+.badge-status-cancelled { background: #ef444420; color: #991b1b; }
 </style>
 @endsection
-
