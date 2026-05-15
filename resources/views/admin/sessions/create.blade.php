@@ -59,7 +59,6 @@
                         <option value="course"     @selected(old('category') === 'course')>By Course</option>
                         <option value="section"    @selected(old('category') === 'section')>By Section</option>
                         <option value="department" @selected(old('category') === 'department')>By Department</option>
-                        <option value="manual"     @selected(old('category') === 'manual')>Manual</option>
                     </select>
                 </div>
 
