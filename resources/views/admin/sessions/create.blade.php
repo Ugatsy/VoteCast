@@ -59,7 +59,6 @@
                         <option value="course"     @selected(old('category') === 'course')>By Course</option>
                         <option value="section"    @selected(old('category') === 'section')>By Section</option>
                         <option value="department" @selected(old('category') === 'department')>By Department</option>
-                        <option value="manual"     @selected(old('category') === 'manual')>Manual</option>
                     </select>
                 </div>
 
@@ -92,16 +91,6 @@
                 <hr class="my-4">
 
                 <p class="fw-semibold small mb-3">Election Options</p>
-
-                <div class="mb-3">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" name="allow_vote_changes"
-                               id="allowChanges" value="1" @checked(old('allow_vote_changes'))>
-                        <label class="form-check-label small" for="allowChanges">
-                            Allow voters to change their vote
-                        </label>
-                    </div>
-                </div>
 
                 <div class="mb-3">
                     <div class="form-check form-switch">
