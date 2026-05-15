@@ -895,7 +895,7 @@
 
 {{-- Receipt Modal --}}
 <div class="modal fade" id="receiptModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content receipt-modal">
             <div class="modal-header" style="background: linear-gradient(135deg, #1a56db 0%, #1447c0 100%); color: white;">
                 <h5 class="modal-title" style="font-size:1rem">

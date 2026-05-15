@@ -14,16 +14,16 @@
             padding: 2rem 1rem;
         }
 
-        .receipt-card {
-            background: #fff;
-            border-radius: 20px;
-            border: 1px solid #e2e8f0;
-            max-width: 700px;
-            width: 100%;
-            margin: 0 auto;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(26,86,219,0.1);
-        }
+   .receipt-card {
+    background: #fff;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    max-width: 320px;
+    width: 100%;
+    margin: 0 auto;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(26,86,219,0.1);
+}
 
         .receipt-header {
             background: linear-gradient(135deg, #1a56db 0%, #1447c0 100%);

@@ -224,10 +224,11 @@
             <div class="text-center mb-4">
                 <div class="brand">Vote<span>Cast</span></div>
                 <div class="subtitle">Campus Election Portal</div>
-                <div class="semester-badge">
+                 <div class="semester-badge">
                     <i class="bi bi-calendar3"></i>
                     Active: {{ $currentSemester }} {{ $currentAcademicYear }}
                 </div>
+            </div>
 
             {{-- Feature pills --}}
             <div class="d-flex justify-content-center gap-2 flex-wrap mb-4">
