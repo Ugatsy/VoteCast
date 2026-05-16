@@ -18,7 +18,7 @@
     background: #fff;
     border-radius: 20px;
     border: 1px solid #e2e8f0;
-    max-width: 320px;
+    max-width: 400px;
     width: 100%;
     margin: 0 auto;
     overflow: hidden;
