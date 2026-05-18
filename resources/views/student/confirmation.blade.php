@@ -110,24 +110,45 @@
             </div>
         </div>
 
-        {{-- Vote Summary --}}
-        <div class="votes-section">
-            <h6>Your Votes</h6>
-            @if($votes->count() > 0)
-                @foreach($votes as $vote)
+ {{-- Vote Summary --}}
+<div class="votes-section">
+    <h6>Your Votes</h6>
+
+    @if($votingSession->positions->isEmpty())
+        <div class="abstain-item">
+            <i class="bi bi-eye-slash me-2"></i>
+            <strong>No positions found for this election.</strong>
+        </div>
+    @else
+        @foreach($votingSession->positions->sortBy('display_order') as $position)
+            @if(isset($votesByPosition[$position->id]))
                 <div class="vote-item">
-                    <div class="vote-position">{{ $vote->position->title }}</div>
-                    <div class="vote-candidate">{{ $vote->candidate->student->full_name }}</div>
+                    <div class="vote-position">{{ $position->title }}</div>
+                    <div class="vote-candidate">
+                        {{ $votesByPosition[$position->id]->candidate->student->full_name }}
+                    </div>
                 </div>
-                @endforeach
             @else
-                <div class="abstain-item">
-                    <i class="bi bi-eye-slash me-2"></i>
-                    <strong>You abstained from all positions</strong>
-                    <div class="small mt-1">No votes were cast in this election. You chose to skip all positions.</div>
+                <div class="vote-item">
+                    <div class="vote-position">{{ $position->title }}</div>
+                    <div class="vote-candidate">
+                        <span style="
+                            background: #d14343;
+                            color: #000000;
+                            font-size: 0.75rem;
+                            font-weight: 600;
+                            padding: 0.2rem 0.6rem;
+                            border-radius: 20px;
+                            letter-spacing: 0.3px;
+                        ">
+                            <i class="bi bi-dash-circle me-1"></i>Abstained
+                        </span>
+                    </div>
                 </div>
             @endif
-        </div>
+        @endforeach
+    @endif
+</div>
 
         {{-- Buttons --}}
         <div class="action-buttons">

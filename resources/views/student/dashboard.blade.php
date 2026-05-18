@@ -266,15 +266,15 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.7rem 0;
-            border-bottom: 1px solid #f1f5f9;
+            padding: .2rem 0;
+            border-bottom: 1px solid #aeb7bc;
             gap: 0.5rem;
             flex-wrap: wrap;
         }
 
         .vote-position {
             font-size: 0.8rem;
-            color: #64748b;
+            color: #000000;
             flex: 1;
         }
 
@@ -379,6 +379,7 @@
 
             .vote-candidate {
                 text-align: left;
+                text-transform: uppercase;
             }
 
             .modal-flexible {
@@ -900,7 +901,7 @@
 
 {{-- Receipt Modal --}}
 <div class="modal fade" id="receiptModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-flexible">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 380px;">
         <div class="modal-content receipt-modal">
             <div class="modal-header" style="background: linear-gradient(135deg, #1a56db 0%, #1447c0 100%); color: white;">
                 <h5 class="modal-title" style="font-size:1rem">
@@ -1153,9 +1154,11 @@
                             <div class="vote-item">
                                 <div>
                                     <div class="vote-position">${vote.position_title}</div>
+
+                                </div>
+                                <div class="vote-candidate">${vote.candidate_name.toUpperCase()}
                                     ${section}
                                 </div>
-                                <div class="vote-candidate">${vote.candidate_name}</div>
                             </div>
                         `;
                     });

@@ -194,7 +194,7 @@
         </div>
 
         <div class="votes-section">
-            <h6>Your Votes</h6>
+            <h6>Your Vote</h6>
             @foreach($votes as $vote)
             <div class="vote-item">
                 <div class="vote-position">{{ $vote->position->title }}</div>

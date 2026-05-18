@@ -283,26 +283,28 @@ class VotingBallotController extends Controller
         }
     }
 
-    public function confirmation(Request $request)
-    {
-        $receiptId      = session('receipt_id');
-        $votingSessionId = session('voting_session_id');
+public function confirmation(Request $request)
+{
+    $receiptId       = session('receipt_id');
+    $votingSessionId = session('voting_session_id');
 
-        if (!$receiptId || !$votingSessionId) {
-            return redirect()->route('student.dashboard')
-                ->with('error', 'No vote confirmation found.');
-        }
-
-        $votingSession = VotingSession::findOrFail($votingSessionId);
-
-        // ── FIX 4: fetch ALL votes for this receipt, eager-load relations ──
-        $votes = Vote::where('receipt_id', $receiptId)
-            ->where('voting_session_id', $votingSessionId)   // scoped to session for safety
-            ->with(['candidate.student', 'position'])
-            ->get();
-
-        return view('student.confirmation', compact('votingSession', 'votes', 'receiptId'));
+    if (!$receiptId || !$votingSessionId) {
+        return redirect()->route('student.dashboard')
+            ->with('error', 'No vote confirmation found.');
     }
+
+    $votingSession = VotingSession::with('positions')->findOrFail($votingSessionId);
+
+    $votes = Vote::where('receipt_id', $receiptId)
+        ->where('voting_session_id', $votingSessionId)
+        ->with(['candidate.student', 'position'])
+        ->get();
+
+    // Key votes by position_id for easy lookup in the blade
+    $votesByPosition = $votes->keyBy('position_id');
+
+    return view('student.confirmation', compact('votingSession', 'votes', 'receiptId', 'votesByPosition'));
+}
 
     public function getReceipt(Request $request, $sessionId)
     {
