@@ -133,8 +133,8 @@
                     <div class="vote-position">{{ $position->title }}</div>
                     <div class="vote-candidate">
                         <span style="
-                            background: #d14343;
-                            color: #000000;
+                            background: #fef2f2;
+                            color: #ef4444;
                             font-size: 0.75rem;
                             font-weight: 600;
                             padding: 0.2rem 0.6rem;
