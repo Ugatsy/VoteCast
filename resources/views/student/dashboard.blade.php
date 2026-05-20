@@ -703,9 +703,9 @@
                             <button class="btn-view-results" onclick="showLiveResults({{ $session->id }})">
                                 <i class="bi bi-bar-chart-fill me-1"></i>Results
                             </button>
-                            <button class="btn-view-receipt" onclick="viewReceipt({{ $session->id }})">
+<a href="{{ route('student.receipt.page', $session->id) }}" target="_blank" class="btn-view-receipt">
                                 <i class="bi bi-receipt me-1"></i>Receipt
-                            </button>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -749,9 +749,9 @@
                             <button class="btn-view-results" onclick="showFinalResults({{ $session->id }})">
                                 <i class="bi bi-trophy me-1"></i>Winners
                             </button>
-                            <button class="btn-view-receipt" onclick="viewReceipt({{ $session->id }})">
+<a href="{{ route('student.receipt.page', $session->id) }}" target="_blank" class="btn-view-receipt">
                                 <i class="bi bi-receipt me-1"></i>Receipt
-                            </button>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -1145,22 +1145,34 @@
             });
             const data = await response.json();
 
-            if (data.success) {
+if (data.success) {
                 let votesHtml = '';
-                if (data.votes && data.votes.length > 0) {
-                    data.votes.forEach(vote => {
-                        const section = vote.candidate_section ? `<div class="small text-muted">${vote.candidate_section}</div>` : '';
-                        votesHtml += `
-                            <div class="vote-item">
-                                <div>
-                                    <div class="vote-position">${vote.position_title}</div>
-
+                if (data.positions && data.positions.length > 0) {
+                    data.positions.forEach(pos => {
+                        if (pos.abstained) {
+                            votesHtml += `
+                                <div class="vote-item">
+                                    <div class="vote-position">${pos.position_title}</div>
+                                    <div class="vote-candidate">
+                                        <span style="background:#fef2f2;color:#ef4444;font-size:0.75rem;font-weight:600;padding:0.2rem 0.6rem;border-radius:20px;letter-spacing:0.3px;">
+                                            <i class="bi bi-dash-circle me-1"></i>Abstained
+                                        </span>
+                                    </div>
                                 </div>
-                                <div class="vote-candidate">${vote.candidate_name.toUpperCase()}
-                                    ${section}
+                            `;
+                        } else {
+                            const section = pos.candidate_section ? `<div class="small text-muted">${pos.candidate_section}</div>` : '';
+                            votesHtml += `
+                                <div class="vote-item">
+                                    <div>
+                                        <div class="vote-position">${pos.position_title}</div>
+                                    </div>
+                                    <div class="vote-candidate">${pos.candidate_name.toUpperCase()}
+                                        ${section}
+                                    </div>
                                 </div>
-                            </div>
-                        `;
+                            `;
+                        }
                     });
                 } else {
                     votesHtml = `
@@ -1172,6 +1184,7 @@
                     `;
                 }
 
+               receiptContent.dataset.sessionTitle = data.session_title ?? '';
                 receiptContent.innerHTML = `
                     <div>
                         <div class="receipt-id-box mb-3">
@@ -1198,13 +1211,133 @@
         }
     }
 
-    function printReceipt() {
-        const receiptContent = document.getElementById('receiptContent').innerHTML;
+function printReceipt() {
+        const receiptContent = document.getElementById('receiptContent');
+
+        // Pull data out of the already-rendered modal
+        const receiptIdEl   = receiptContent.querySelector('.receipt-id-value');
+        const votedAtEl     = receiptContent.querySelector('[style*="94a3b8"]');
+        const sessionTitleEl = receiptContent.querySelector('[data-session-title]');
+        const voteItems     = receiptContent.querySelectorAll('.vote-item');
+
+        const receiptId   = receiptIdEl   ? receiptIdEl.innerText.trim()   : '—';
+        const votedAt     = votedAtEl     ? votedAtEl.innerText.trim()     : '';
+        const sessionTitle = receiptContent.dataset.sessionTitle || document.title;
+
+        let votesHtml = '';
+        voteItems.forEach(item => {
+            const pos  = item.querySelector('.vote-position');
+            const cand = item.querySelector('.vote-candidate');
+            votesHtml += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.65rem 0;border-bottom:1px solid #f1f5f9;gap:1rem;">
+                    <div style="font-size:0.82rem;color:#64748b;">${pos ? pos.innerHTML : ''}</div>
+                    <div style="font-weight:600;color:#1e293b;font-size:0.9rem;text-align:right;">${cand ? cand.innerHTML : ''}</div>
+                </div>`;
+        });
+
+        if (!votesHtml) {
+            votesHtml = `
+                <div style="background:#fef3c7;border-radius:10px;padding:0.7rem 1rem;color:#92400e;">
+                    <strong>You abstained from all positions</strong>
+                </div>`;
+        }
+
         const printWindow = window.open('', '_blank');
         printWindow.document.write(`
-            <html><head><title>Vote Receipt</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"></head>
-            <body><div class="container mt-4">${receiptContent}</div><script>window.print();window.close();<\/script></body></html>
-        `);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VoteCast — Vote Receipt</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #f0f4ff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+        .receipt-card {
+            background: #fff;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+            max-width: 540px;
+            width: 100%;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(26,86,219,0.1);
+        }
+        .receipt-header {
+            background: linear-gradient(135deg, #1a56db 0%, #1447c0 100%);
+            color: #fff;
+            padding: 2rem;
+            text-align: center;
+        }
+        .receipt-header .check-icon {
+            width: 70px; height: 70px; border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1rem; font-size: 2rem;
+        }
+        .receipt-header h4 { font-weight: 800; margin-bottom: 0.25rem; font-size: 1.25rem; }
+        .receipt-header p  { opacity: 0.85; margin: 0; font-size: 0.9rem; }
+        .receipt-id-box {
+            background: #f0f4ff;
+            border: 2px dashed #93c5fd;
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            text-align: center;
+            margin: 1.5rem 1.5rem 0;
+        }
+        .receipt-id-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; }
+        .receipt-id-value {
+            font-family: 'Courier New', monospace;
+            font-size: 1.3rem; font-weight: 800;
+            color: #1a56db; letter-spacing: 2px; margin-top: 0.25rem;
+        }
+        .votes-section { padding: 1.5rem; }
+        .votes-section h6 { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; margin-bottom: 0.75rem; }
+        .footer-note {
+            padding: 0 1.5rem 1.5rem;
+            text-align: center;
+            font-size: 0.72rem;
+            color: #94a3b8;
+        }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .receipt-card { box-shadow: none; border: 1px solid #ccc; }
+        }
+    </style>
+</head>
+<body>
+<div class="receipt-card">
+    <div class="receipt-header">
+        <div class="check-icon">✅</div>
+        <h4>Vote Receipt</h4>
+        <p><strong>${sessionTitle}</strong></p>
+    </div>
+
+    <div class="receipt-id-box">
+        <div class="receipt-id-label">Receipt ID — keep this for your records</div>
+        <div class="receipt-id-value">${receiptId}</div>
+        <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px">${votedAt}</div>
+    </div>
+
+    <div class="votes-section">
+        <h6>Your Votes</h6>
+        ${votesHtml}
+    </div>
+
+    <div class="footer-note">
+        <i class="bi bi-shield-check"></i> Official VoteCast voting receipt
+    </div>
+</div>
+<script>window.onload = function(){ window.print(); }<\/script>
+</body>
+</html>`);
         printWindow.document.close();
     }
 </script>

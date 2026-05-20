@@ -95,10 +95,16 @@
     <div class="receipt-card">
 
         {{-- Header --}}
-        <div class="receipt-header">
+<div class="receipt-header">
             <div class="check-icon">✅</div>
             <h4>Vote Submitted!</h4>
             <p>Your ballot has been securely recorded for<br><strong>{{ $votingSession->title }}</strong></p>
+            <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.2);">
+                <div style="font-size:1rem;font-weight:700;letter-spacing:0.3px;">{{ $user->full_name }}</div>
+                <div style="font-size:0.8rem;opacity:0.75;margin-top:0.2rem;">
+                    {{ $user->student_id }} &bull; {{ $user->section }}
+                </div>
+            </div>
         </div>
 
         {{-- Receipt ID --}}

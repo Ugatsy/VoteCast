@@ -303,8 +303,8 @@ public function confirmation(Request $request)
     // Key votes by position_id for easy lookup in the blade
     $votesByPosition = $votes->keyBy('position_id');
 
-    return view('student.confirmation', compact('votingSession', 'votes', 'receiptId', 'votesByPosition'));
-}
+$user = auth()->user();
+    return view('student.confirmation', compact('votingSession', 'votes', 'receiptId', 'votesByPosition', 'user'));}
 
     public function getReceipt(Request $request, $sessionId)
     {
@@ -330,11 +330,26 @@ public function confirmation(Request $request)
                 ], 404);
             }
 
-            // ── FIX 5: fetch by voter_id (consistent with showReceiptPage) ──
+// ── FIX 5: fetch by voter_id (consistent with showReceiptPage) ──
             $votes = Vote::where('voting_session_id', $sessionId)
                 ->where('voter_id', $user->id)
                 ->with(['candidate.student', 'position'])
                 ->get();
+
+            // Load all positions so the frontend can show abstains
+            $session->load('positions');
+            $votesByPositionId = $votes->keyBy('position_id');
+
+            $positions = $session->positions->sortBy('display_order')->map(function ($position) use ($votesByPositionId) {
+                $vote = $votesByPositionId->get($position->id);
+                return [
+                    'position_id'      => $position->id,
+                    'position_title'   => $position->title,
+                    'abstained'        => is_null($vote),
+                    'candidate_name'   => $vote ? ($vote->candidate->student->full_name ?? 'Unknown') : null,
+                    'candidate_section' => $vote ? ($vote->candidate->student->section ?? 'N/A') : null,
+                ];
+            })->values();
 
             return response()->json([
                 'success'       => true,
@@ -344,10 +359,12 @@ public function confirmation(Request $request)
                     : null,
                 'has_votes'     => $participation->has_votes,
                 'session_title' => $session->title,
+                'positions'     => $positions,
+                // Keep 'votes' for backwards compatibility
                 'votes'         => $votes->map(function ($vote) {
                     return [
-                        'position_title'   => $vote->position->title ?? 'Unknown',
-                        'candidate_name'   => $vote->candidate->student->full_name ?? 'Unknown',
+                        'position_title'    => $vote->position->title ?? 'Unknown',
+                        'candidate_name'    => $vote->candidate->student->full_name ?? 'Unknown',
                         'candidate_section' => $vote->candidate->student->section ?? 'N/A',
                     ];
                 }),
@@ -385,10 +402,14 @@ public function confirmation(Request $request)
             ->orderBy('position_id')          // consistent display order
             ->get();
 
-        $votingSession = VotingSession::findOrFail($sessionId);
+        $votingSession = VotingSession::with('positions')->findOrFail($sessionId);
         $receiptId     = $participation->receipt_id;
+        $votedAt       = $participation->voted_at
+            ? $participation->voted_at->format('F d, Y \a\t H:i')
+            : now()->format('F d, Y \a\t H:i');
 
-        return view('student.receipt', compact('votingSession', 'votes', 'receiptId'));
+        $user = auth()->user();
+        return view('student.receipt', compact('votingSession', 'votes', 'receiptId', 'votedAt', 'user'));
     }
 
     // ──────────────────────────────────────────────────────────────────────────

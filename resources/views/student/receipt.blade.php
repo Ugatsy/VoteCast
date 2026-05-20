@@ -7,11 +7,14 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        body {
+body {
             background: #f0f4ff;
             font-family: 'Segoe UI', system-ui, sans-serif;
             min-height: 100vh;
             padding: 2rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
    .receipt-card {
@@ -71,13 +74,15 @@
             color: #64748b;
         }
 
-        .receipt-id-value {
+.receipt-id-value {
             font-family: 'Courier New', monospace;
-            font-size: 1.3rem;
+            font-size: 1rem;
             font-weight: 800;
             color: #1a56db;
-            letter-spacing: 2px;
+            letter-spacing: 1px;
             margin-top: 0.25rem;
+            word-break: break-all;
+            overflow-wrap: break-word;
         }
 
         .votes-section {
@@ -159,18 +164,51 @@
             background: #1447c0;
             color: #fff;
         }
+          @page {
+            margin: 0;
+        }
 
-        @media print {
+@media print {
             body {
-                background: #fff;
+                background: #fff !important;
                 padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
             .receipt-card {
-                box-shadow: none;
-                border: 1px solid #ccc;
+                box-shadow: none !important;
+                border: 1px solid #e2e8f0 !important;
+                max-width: 540px;
+                border-radius: 20px;
+            }
+            .receipt-header {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                background: linear-gradient(135deg, #1a56db 0%, #1447c0 100%) !important;
+                color: #fff !important;
+            }
+            .receipt-header h4,
+            .receipt-header p,
+            .receipt-header strong {
+                color: #fff !important;
+            }
+            .check-icon {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                background: rgba(255,255,255,0.2) !important;
+            }
+            .receipt-id-box {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                background: #f0f4ff !important;
+                border: 2px dashed #93c5fd !important;
+            }
+            .receipt-id-value {
+                color: #1a56db !important;
             }
             .action-buttons {
-                display: none;
+                display: none !important;
             }
         }
     </style>
@@ -179,28 +217,56 @@
 
 <div class="container">
     <div class="receipt-card">
-        <div class="receipt-header">
+<div class="receipt-header">
             <div class="check-icon">✅</div>
             <h4>Vote Receipt</h4>
             <p>Official voting record for<br><strong>{{ $votingSession->title }}</strong></p>
+            <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.2);">
+                <div style="font-size:1rem;font-weight:700;letter-spacing:0.3px;">{{ $user->full_name }}</div>
+                <div style="font-size:0.8rem;opacity:0.75;margin-top:0.2rem;">
+                    {{ $user->student_id }} &bull; {{ $user->section }}
+                </div>
+            </div>
         </div>
 
         <div class="receipt-id-box">
             <div class="receipt-id-label">Receipt ID — keep this for your records</div>
             <div class="receipt-id-value">{{ $receiptId }}</div>
-            <div style="font-size:0.75rem;color:#94a3b8;margin-top:4px">
-                {{ now()->format('F d, Y \a\t H:i') }}
+<div style="font-size:0.75rem;color:#94a3b8;margin-top:4px">
+                {{ isset($votedAt) ? $votedAt : now()->format('F d, Y \a\t H:i') }}
             </div>
         </div>
 
-        <div class="votes-section">
-            <h6>Your Vote</h6>
-            @foreach($votes as $vote)
-            <div class="vote-item">
-                <div class="vote-position">{{ $vote->position->title }}</div>
-                <div class="vote-candidate">{{ $vote->candidate->student->full_name }}</div>
-            </div>
-            @endforeach
+<div class="votes-section">
+            <h6>Your Votes</h6>
+            @php $votesByPosition = $votes->keyBy('position_id'); @endphp
+
+            @if($votingSession->positions->isEmpty())
+                <div style="background:#fef3c7;border-radius:10px;padding:0.7rem 1rem;color:#92400e;">
+                    <i class="bi bi-eye-slash me-2"></i>
+                    <strong>No positions found for this election.</strong>
+                </div>
+            @else
+                @foreach($votingSession->positions->sortBy('display_order') as $position)
+                    @if(isset($votesByPosition[$position->id]))
+                        <div class="vote-item">
+                            <div class="vote-position">{{ $position->title }}</div>
+                            <div class="vote-candidate">
+                                {{ $votesByPosition[$position->id]->candidate->student->full_name }}
+                            </div>
+                        </div>
+                    @else
+                        <div class="vote-item">
+                            <div class="vote-position">{{ $position->title }}</div>
+                            <div class="vote-candidate">
+                                <span style="background:#fef2f2;color:#ef4444;font-size:0.75rem;font-weight:600;padding:0.2rem 0.6rem;border-radius:20px;letter-spacing:0.3px;">
+                                    <i class="bi bi-dash-circle me-1"></i>Abstained
+                                </span>
+                            </div>
+                        </div>
+                    @endif
+                @endforeach
+            @endif
         </div>
 
         <div class="action-buttons">
